@@ -1,10 +1,10 @@
 {
   "name": "@lchhzz/view-deploy",
-  "version": "1.0.3",
+  "version": "1.0.5",
   "description": "一个可自定义的 SSH 部署工具，支持前端项目部署，自动转换 Windows/Unix 命令",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "files": [
     "dist",
     "README.md",
@@ -18,15 +18,16 @@
     "access": "public"
   },
   "scripts": {
-    "cl-vd": "tsx src/cli.ts",
+    "dev": "tsx src/cli.ts",
     "build": "tsc",
     "start": "node dist/cli.js",
     "cli": "node dist/cli.js",
     "postinstall": "node dist/scripts/setup.js",
-    "deploy": "npm run cl-vd -- deploy",
-    "deploy:init": "npm run cl-vd -- init",
-    "deploy:config": "npm run cl-vd config --",
-    "deploy:test": "npm run cl-vd test --"
+    "deploy": "npm run dev -- deploy",
+    "deploy:init": "npm run dev -- init",
+    "deploy:config": "npm run dev config --",
+    "deploy:test": "npm run dev test --",
+    "deploy:reset": "npm run dev reset --"
   },
   "keywords": [
     "deploy",
@@ -36,6 +37,9 @@
   ],
   "author": "cl",
   "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  },
   "devDependencies": {
     "@types/chokidar": "^1.7.5",
     "@types/inquirer": "^9.0.0",
@@ -45,11 +49,11 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "chalk": "^5.6.2",
-    "chokidar": "^4.0.3",
-    "commander": "^11.0.0",
-    "inquirer": "^9.0.0",
-    "ssh2": "^1.17.0"
+    "chalk": "^4.1.2",
+    "chokidar": "^3.5.3",
+    "commander": "^9.5.0",
+    "inquirer": "^8.2.5",
+    "ssh2": "^1.15.0"
   },
   "repository": {
     "type": "git",

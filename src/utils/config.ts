@@ -1,6 +1,6 @@
 // src/utils/config.ts
 import { readFileSync, existsSync, writeFileSync } from 'fs'
-import path, { dirname, join, resolve } from 'path'
+import { dirname, extname, join, resolve } from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
 import { EnvironmentConfig } from '../types/config'
 import chalk from 'chalk'
@@ -19,10 +19,11 @@ export class ConfigManager {
   public get RootPath() {
     // 基于当前文件位置计算
     const __filename = fileURLToPath(import.meta.url)
+
     const __dirname = dirname(__filename)
 
     // 直接返回 dist 的父级（包根目录）
-    return resolve(__dirname, '..')
+    return resolve(__dirname, '../../')
   }
 
   /**
@@ -65,7 +66,7 @@ export class ConfigManager {
    * 加载具体的配置文件
    */
   private async loadConfigFile(configPath: string, model?: string): Promise<Array<EnvironmentConfig>> {
-    const ext = path.extname(configPath)
+    const ext = extname(configPath)
     if (ext === '.js') {
       const fileUrl = pathToFileURL(resolve(configPath)).href
       const importedModule = await import(fileUrl)

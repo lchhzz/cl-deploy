@@ -1,19 +1,66 @@
-// dist/scripts/setup.js
+#!/usr/bin/env node
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { resolve } from 'path'
 
+console.log('🔧 @lchhzz/view-deploy 安装脚本执行中...')
+
+function getProjectRoot() {
+  // 方法1：使用 npm 设置的环境变量（最可靠）
+  if (process.env.INIT_CWD) {
+    console.log('📁 使用 INIT_CWD:', process.env.INIT_CWD)
+    return process.env.INIT_CWD
+  }
+
+  // 方法2：检查当前目录是否在 node_modules 中，如果是则向上两级
+  const currentDir = process.cwd()
+  console.log('📁 当前目录:', currentDir)
+
+  if (currentDir.includes('node_modules')) {
+    // 如果在 node_modules/@lchhzz/view-deploy/... 中
+    const paths = currentDir.split('node_modules')
+    const projectRoot = paths[0] // node_modules 之前的路径
+    console.log('📁 检测到 node_modules，项目根目录:', projectRoot)
+    return projectRoot
+  }
+
+  // 方法3：向上查找包含 package.json 的目录
+  let searchDir = currentDir
+  for (let i = 0; i < 10; i++) {
+    const possiblePkg = resolve(searchDir, 'package.json')
+    console.log('🔍 检查路径:', possiblePkg)
+
+    if (existsSync(possiblePkg)) {
+      console.log('📁 找到 package.json，项目根目录:', searchDir)
+      return searchDir
+    }
+
+    const parentDir = resolve(searchDir, '..')
+    if (parentDir === searchDir) {
+      break // 到达根目录
+    }
+    searchDir = parentDir
+  }
+
+  console.log('⚠️  使用当前目录作为项目根目录')
+  return currentDir
+}
+
+const projectRoot = getProjectRoot().replace(/\\/g, '/') // 统一路径格式
+console.log('🎯 最终项目根目录:', projectRoot)
+
 function addDeployScripts() {
   try {
-    const packageJsonPath = resolve(process.cwd(), 'package.json')
+    const packageJsonPath = resolve(projectRoot, 'package.json')
+    console.log('📄 Package.json 路径:', packageJsonPath)
 
     if (!existsSync(packageJsonPath)) {
-      console.log('📦 未找到 package.json，跳过脚本添加')
+      console.log('❌ 未找到 package.json，跳过脚本添加')
       return
     }
 
     const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf8'))
+    console.log('📦 项目名称:', pkg.name || '未设置')
 
-    // 定义要添加的脚本
     const deployScripts = {
       deploy: 'view-deploy deploy',
       'deploy:init': 'view-deploy init',
@@ -21,12 +68,9 @@ function addDeployScripts() {
       'deploy:config': 'view-deploy config'
     }
 
-    // 初始化 scripts 对象（如果不存在）
     pkg.scripts = pkg.scripts || {}
-
     let addedCount = 0
 
-    // 只添加不存在的脚本
     for (const [name, command] of Object.entries(deployScripts)) {
       if (!pkg.scripts[name]) {
         pkg.scripts[name] = command
@@ -36,9 +80,36 @@ function addDeployScripts() {
     }
 
     if (addedCount > 0) {
-      // 写回 package.json
       writeFileSync(packageJsonPath, JSON.stringify(pkg, null, 2))
       console.log(`🎉 成功添加 ${addedCount} 个部署脚本到 package.json`)
+
+      // 创建默认配置文件
+      const configPath = resolve(projectRoot, 'deploy.config.json')
+      if (!existsSync(configPath)) {
+        const defaultConfig = {
+          $schema: './node_modules/@lchhzz/view-deploy/schema.json',
+          projectName: pkg.name || 'my-project',
+          privateKey: '~/.ssh/id_rsa',
+          scripts: {
+            build: 'npm run build',
+            install: 'npm install'
+          },
+          test: {
+            host: 'test.example.com',
+            username: 'root',
+            port: 22,
+            deployPath: '/home/www/test'
+          },
+          prod: {
+            host: 'prod.example.com',
+            username: 'root',
+            port: 22,
+            deployPath: '/home/www/prod'
+          }
+        }
+        writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2))
+        console.log('✅ 已创建默认配置文件 deploy.config.json')
+      }
     } else {
       console.log('📝 部署脚本已存在，无需添加')
     }
@@ -48,3 +119,10 @@ function addDeployScripts() {
 }
 
 addDeployScripts()
+
+console.log(`
+💡 使用方法:
+npm run deploy:init    # 初始化配置文件
+npm run deploy:test    # 测试部署配置
+npm run deploy         # 执行部署
+`)

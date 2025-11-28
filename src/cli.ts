@@ -39,6 +39,8 @@ class ViewDeployCLI {
 
     // test 命令 - 测试连接
     this.program.command('test').description('测试服务器连接').option('-e, --model <model>', '环境名称', 'development').action(this.handleTest.bind(this))
+    // reset - 还原部署
+    this.program.command('reset').description('还原部署').option('-e, --model <model>', '还原部署的环境', 'development').action(this.handleReset.bind(this))
 
     // 默认命令（当没有提供子命令时）
     this.program.action(() => {
@@ -106,9 +108,8 @@ class ViewDeployCLI {
 
       // 模板文件路径
       // 写入配置文件
-      console.log(configManager.RootPath, 'configManager.RootPath')
 
-      let temp = readFileSync(join(configManager.RootPath, 'deploy.config.ts'), 'utf-8')
+      let temp = readFileSync(join(configManager.RootPath, 'src', 'deploy.config.ts'), 'utf-8')
 
       if (options.type == 'js') {
         const tempJs = temp.replace(': Array<EnvironmentConfig>', '').replace("import { EnvironmentConfig } from './types/config'", '')
@@ -161,7 +162,11 @@ class ViewDeployCLI {
       this.handleError(error)
     }
   }
-
+  /**
+   * 还原部署
+   * @param options
+   */
+  private async handleReset(options: OptionsModel) {}
   /**
    * 显示配置信息
    */
