@@ -8,8 +8,9 @@ export interface ServerConfig {
   host: string
   /** SSH 端口，默认 22 */
   port?: number
-  /** 登陆信息 环境变量 格式为 userName\password */
-  sshInfo: string
+  /** 登陆信息 */
+  userName: string
+  password?: string
   /** 可选：使用密钥认证 有密钥不使用 sshInfo */
   sshKey?: string
 }
@@ -24,18 +25,20 @@ export interface PathConfig {
   remotePath: string
   /** 上传文件夹 */
   projectName: string
-  /** 红绿模式切换文件夹 默认：old_{projectName} */
-  oldName: string
 }
 
 /**
  * 部署选项接口
  */
 export interface DeployOptions {
-  /** 是否启用备份 */
-  backup: boolean
-  /** 是否跳过备份（红绿模式） */
-  noBackup?: boolean
+  /** 部署前要执行的命令 */
+  preDeploy: Array<string>
+  /** 部署后要执行的命令 */
+  postDeploy: Array<string>
+  /** 是否启用备份      (backup-{project_name})*/
+  backup?: boolean
+  /** 是否开启红绿模式  (old_{project_name}) */
+  dichromatic?: boolean
 }
 
 /**
@@ -56,7 +59,7 @@ export interface handleInitOptions {
   // 指定相对于项目的生成配置文件路径
   path?: string
 }
-export interface handleDeployOptions {
+export interface OptionsModel {
   /**
    * 不传为全部执行
    * 使用指定{name}的配置

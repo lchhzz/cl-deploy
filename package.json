@@ -14,6 +14,7 @@
     "build": "tsc",
     "start": "node dist/cli.js",
     "cli": "node dist/cli.js",
+    "deploy": "npm run dev -- deploy",
     "deploy:init": "npm run dev -- init",
     "deploy:config": "npm run dev config --",
     "deploy:test": "npm run dev test --"

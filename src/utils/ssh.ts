@@ -1,12 +1,15 @@
 import chalk from 'chalk'
 import { join } from 'path'
-import { Client, ConnectConfig } from 'ssh2'
 import { ServerConfig } from '../types/config.js'
-import { createReadStream, readdirSync, statSync, existsSync } from 'fs'
+import { ProgressIndicator } from './progress.js'
+import { readdirSync, statSync, existsSync } from 'fs'
+import { Client, ConnectConfig, SFTPWrapper } from 'ssh2'
+import _PathUtils from './pathUtils.js'
+import { IntelligentCommandConverter } from './intelligent-command-converter.js'
 
-/**
- * SSH 连接配置
- */
+const Progress1 = new ProgressIndicator()
+const Progress2 = new ProgressIndicator()
+
 export interface SSHConnectionConfig extends ConnectConfig {
   host: string
   port?: number
@@ -16,9 +19,6 @@ export interface SSHConnectionConfig extends ConnectConfig {
   readyTimeout?: number
 }
 
-/**
- * SSH 命令执行结果
- */
 export interface SSHCommandResult {
   code: number
   stdout: string
@@ -26,241 +26,284 @@ export interface SSHCommandResult {
   success: boolean
 }
 
-/**
- * SSH 文件传输工具类
- */
 export class SSHTool {
-  private client: Client
+  public client: Client
+  private serverType: 'unix' | 'windows' | undefined
   private config: SSHConnectionConfig
-  private connected: boolean = false // 重命名属性
-
+  private connected: boolean = false
+  private sftp: SFTPWrapper | null = null
+  private pendingOperations = 0
   constructor(serverConfig: ServerConfig) {
     this.config = this.prepareSSHConfig(serverConfig)
     this.client = new Client()
   }
 
   /**
-   * 准备 SSH 连接配置
+   * 格式化参数
+   * @param serverConfig
+   * @returns
    */
   private prepareSSHConfig(serverConfig: ServerConfig): SSHConnectionConfig {
     const config: SSHConnectionConfig = {
       host: serverConfig.host,
       port: serverConfig.port || 22,
-      username: serverConfig.username,
+      username: serverConfig.userName,
       password: serverConfig.password,
-      readyTimeout: 30000 // 30秒超时
+      hostKey: serverConfig.sshKey,
+      readyTimeout: 30000,
+      algorithms: {
+        kex: ['ecdh-sha2-nistp256', 'ecdh-sha2-nistp384', 'ecdh-sha2-nistp521', 'diffie-hellman-group14-sha256']
+      }
     }
-
-    // 添加私钥支持
-    if (serverConfig.hostKey) config.hostKey = serverConfig.hostKey
     return config
   }
 
   /**
-   * 建立 SSH 连接
+   * 执行脚本
+   * @param command  脚本
+   * @param timeout
+   * @returns
    */
-  public async connect(): Promise<void> {
+  public async executeCommand(command: string, timeout = 30000): Promise<SSHCommandResult> {
     return new Promise((resolve, reject) => {
-      if (this.connected) {
-        console.log(chalk.yellow('⚠️ SSH 连接已存在'))
-        resolve()
-        return
-      }
+      console.log(chalk.cyan('⚡ 执行命令:'), command)
 
-      console.log(chalk.blue('🔗 连接 SSH 服务器...'))
-      console.log(chalk.gray(`  主机: ${this.config.host}:${this.config.port}`))
-      console.log(chalk.gray(`  用户: ${this.config.username}`))
+      const timeoutId = setTimeout(() => {
+        reject(new Error('命令执行超时'))
+      }, timeout)
 
-      this.client.on('ready', () => {
-        this.connected = true
-        console.log(chalk.green('✅ SSH 连接成功'))
-        resolve()
-      })
-
-      this.client.on('error', error => {
-        console.log(chalk.red('❌ SSH 连接失败:'), error.message)
-        reject(new Error(`SSH 连接失败: ${error.message}`))
-      })
-
-      this.client.on('close', () => {
-        this.connected = false
-        console.log(chalk.yellow('🔌 SSH 连接已关闭'))
-      })
-
-      // 建立连接
-      this.client.connect(this.config)
-    })
-  }
-
-  /**
-   * 关闭 SSH 连接
-   */
-  public disconnect(): void {
-    if (this.connected) {
-      this.client.end()
-      this.connected = false
-    }
-  }
-
-  /**
-   * 检查连接状态
-   */
-  public isConnected(): boolean {
-    return this.connected
-  }
-
-  /**
-   * 执行远程命令
-   */
-  public async executeCommand(command: string): Promise<SSHCommandResult> {
-    if (!this.connected) {
-      throw new Error('SSH 连接未建立，请先调用 connect() 方法')
-    }
-
-    return new Promise((resolve, reject) => {
-      console.log(chalk.cyan('⚡ 执行命令:'), chalk.gray(command))
-
-      this.client.exec(command, (error, stream) => {
-        if (error) {
-          reject(new Error(`命令执行失败: ${error.message}`))
+      this.client.exec(IntelligentCommandConverter.convertCommand(command, this.serverType), (err, stream) => {
+        if (err) {
+          clearTimeout(timeoutId)
+          reject(err)
           return
         }
 
         let stdout = ''
         let stderr = ''
 
-        stream.on('data', (data: Buffer) => {
-          stdout += data.toString()
-        })
-
-        stream.stderr.on('data', (data: Buffer) => {
-          stderr += data.toString()
-        })
+        stream.on('data', (data: Buffer) => (stdout += data))
+        stream.stderr.on('data', data => (stderr += data))
 
         stream.on('close', (code: number) => {
-          const result: SSHCommandResult = {
-            code,
-            stdout: stdout.trim(),
-            stderr: stderr.trim(),
-            success: code === 0
-          }
+          clearTimeout(timeoutId)
+          const result = { code, stdout: stdout.trim(), stderr: stderr.trim(), success: code === 0 }
 
           if (code === 0) {
             console.log(chalk.green('✅ 命令执行成功'))
-            if (stdout) {
-              console.log(chalk.gray('  输出:'), stdout)
-            }
           } else {
-            console.log(chalk.yellow('⚠️ 命令执行完成，但返回非零状态码:', code))
-            if (stderr) {
-              console.log(chalk.red('  错误:'), stderr)
-            }
+            console.log(chalk.yellow(`⚠️ 命令退出码: ${code}`))
           }
 
           resolve(result)
         })
-
-        stream.on('error', (error: any) => {
-          reject(new Error(`命令执行错误: ${error.message}`))
+        stream.on('error', (err: Error) => {
+          console.log(chalk.red('命令执行失败：' + err))
+          clearTimeout(timeoutId)
+          reject(err)
         })
       })
     })
   }
+  /**
+   * 开启链接状态
+   * @returns
+   */
+  public async connect() {
+    return new Promise<void>(async (resolve, reject) => {
+      if (this.connected) {
+        console.log(chalk.red('SSH 连接已存在\n'))
+        resolve()
+      }
 
+      this.client.on('ready', async () => {
+        this.connected = true
+        console.log(chalk.green('✅ SSH 连接成功'))
+        await this.detectServerType()
+        resolve()
+      })
+
+      this.client.on('error', error => {
+        
+        reject(new Error(`SSH 连接失败: ${error.message}`))
+      })
+
+      this.client.on('close', () => {})
+
+      this.client.connect(this.config)
+    })
+  }
+  // 安全断开连接
+  disconnect() {
+    if (this.connected) {
+      this.client.end()
+      this.connected = false
+      Progress1.stop('')
+      Progress2.stop()
+      console.log(chalk.yellow('🔌 SSH 连接已关闭'))
+    }
+  }
+  /**
+   * 测试连接
+   */
+  public async testConnection(): Promise<boolean> {
+    try {
+      await this.connect()
+      const result = await this.executeCommand('echo "SSHSUCCED"')
+      return result.success && result.stdout.includes('SSHSUCCED')
+    } catch (error) {
+      return false
+    } finally {
+      // 关闭链接
+      this.disconnect()
+    }
+  }
+  /**
+   * 获取 SFTP 连接
+   */
+  private async getSFTP(): Promise<SFTPWrapper> {
+    if (this.sftp) return this.sftp
+    return new Promise((resolve, reject) => {
+      this.client.sftp((error, sftp) => {
+        if (error) {
+          reject(new Error(`SFTP 初始化失败: ${error.message}`))
+        } else {
+          this.sftp = sftp
+          resolve(sftp)
+        }
+      })
+    })
+  }
   /**
    * 检查远程目录是否存在
    */
-  public async directoryExists(remotePath: string): Promise<boolean> {
+  public async directoryExists(escapedPath: string): Promise<boolean> {
     try {
-      // 转义路径中的特殊字符
-      const escapedPath = remotePath.replace(/(["$`\\])/g, '\\$1')
-      const result = await this.executeCommand(`[ -d "${escapedPath}" ] && echo "exists"`)
-      return result.stdout.includes('exists')
+      const _path = _PathUtils.normalizeRemotePath(escapedPath, this.serverType)
+      const psCommand = `powershell -Command "Test-Path -Path '${_path}'"`
+      const result = await this.executeCommand(psCommand)
+      return result.stdout == 'True'
     } catch (error) {
       return false
     }
   }
-
   /**
    * 创建远程目录（递归创建）
    */
   public async createDirectory(remotePath: string): Promise<void> {
-    console.log(chalk.blue('📁 创建远程目录:'), chalk.gray(remotePath))
-
-    // 转义路径
-    const escapedPath = remotePath.replace(/(["$`\\])/g, '\\$1')
-    const result = await this.executeCommand(`mkdir -p "${escapedPath}"`)
-
+    const _path = _PathUtils.normalizeRemotePath(remotePath, this.serverType)
+    const command = `powershell -Command "New-Item -ItemType Directory -Path '${_path}' -Force"`
+    const result = await this.executeCommand(command)
     if (!result.success) {
+      if (result.stderr.includes('Cannot create path')) {
+        throw new Error(`创建目录失败: 路径无效或权限不足`)
+      }
       throw new Error(`创建目录失败: ${result.stderr}`)
     }
-
-    console.log(chalk.green('✅ 目录创建成功'))
   }
 
+  /**
+   * 修改文件名称
+   */
+  public async editDirectoryName(path: string, newName: string) {
+    if (!(await this.directoryExists(path))) return console.log(chalk.yellow('未找到要修改的文件目录'))
+
+    const _path = _PathUtils.normalizeRemotePath(path, this.serverType)
+    console.log(_path, '_path')
+    console.log(newName, 'newName')
+
+    const command = `powershell -Command "Rename-Item -Path '${_path}' -NewName '${newName}' -Force"`
+    const result = await this.executeCommand(command)
+    console.log(result, 'result')
+
+    if (!result.success) {
+      if (result.stderr.includes('Cannot create path')) {
+        throw new Error(`修改目录失败: 路径无效或权限不足`)
+      }
+      throw new Error(`修改目录失败: ${result.stderr}`)
+    }
+  }
+
+  /**
+   * 删除文件
+   * @param path
+   * @param newName
+   */
+  public async delFile(path: string) {
+    if (!(await this.directoryExists(path))) return console.log(chalk.yellow('未找到文件，无需删除'))
+
+    const _path = _PathUtils.normalizeRemotePath(path, this.serverType)
+
+    const command = `powershell -Command "Remove-Item -path "${_path}"  -Recurse -Force"`
+    const result = await this.executeCommand(command)
+    if (!result.success) {
+      if (result.stderr.includes('Cannot create path')) {
+        throw new Error(`删除文件失败: 路径无效或权限不足`)
+      }
+      throw new Error(`删除文件失败: ${result.stderr}`)
+    }
+  }
   /**
    * 上传单个文件
    */
   public async uploadFile(localPath: string, remotePath: string): Promise<void> {
-    if (!this.connected) {
-      throw new Error('SSH 连接未建立')
-    }
+    if (!this.connected) await this.connect()
+    this.pendingOperations++
+    try {
+      Progress2.update(chalk.blue('📤 上传文件:') + chalk.gray(`${localPath} → ${remotePath}`))
+      if (!existsSync(localPath)) throw new Error(`本地文件不存在: ${localPath}`)
+      const sftp = await this.getSFTP()
+      const windowsRemotePath = remotePath.replace(/\//g, '\\')
 
-    if (!existsSync(localPath)) {
-      throw new Error(`本地文件不存在: ${localPath}`)
-    }
-
-    console.log(chalk.blue('⬆️  上传文件:'), chalk.gray(`${localPath} → ${remotePath}`))
-
-    return new Promise((resolve, reject) => {
-      try {
-        const stats = statSync(localPath)
-        console.log(chalk.gray(`  文件大小: ${(stats.size / 1024).toFixed(2)} KB`))
-
-        this.client.sftp((sftpError, sftp) => {
-          if (sftpError) {
-            reject(new Error(`SFTP 初始化失败: ${sftpError.message}`))
-            return
+      await new Promise<void>((resolve, reject) => {
+        sftp.fastPut(
+          localPath,
+          windowsRemotePath,
+          {
+            step: (totalTransferred: number, chunk: number, total: number) => {
+              const percent = ((totalTransferred / total) * 100).toFixed(1)
+              const transferredMB = (totalTransferred / 1024 / 1024).toFixed(2)
+              const totalMB = (total / 1024 / 1024).toFixed(2)
+              Progress2.update(`\r📤 上传进度: ${percent}% (${transferredMB}MB/${totalMB}MB)`)
+            }
+          },
+          (error?: Error | null) => {
+            if (error) {
+              reject(error)
+            } else {
+              resolve()
+            }
           }
-
-          const readStream = createReadStream(localPath)
-
-          // 转义远程路径
-          const escapedRemotePath = remotePath.replace(/(["$`\\])/g, '\\$1')
-          const writeStream = sftp.createWriteStream(escapedRemotePath)
-
-          let uploadedBytes = 0
-          const totalBytes = stats.size
-
-          // 进度监控
-          readStream.on('data', chunk => {
-            uploadedBytes += chunk.length
-            if (totalBytes > 1024 * 1024) {
-              const percent = ((uploadedBytes / totalBytes) * 100).toFixed(1)
-              process.stdout.write(`\r📤 上传进度: ${percent}%`)
-            }
-          })
-
-          writeStream.on('close', () => {
-            if (totalBytes > 1024 * 1024) {
-              process.stdout.write('\n')
-            }
-            console.log(chalk.green('✅ 文件上传成功'))
-            resolve()
-          })
-
-          writeStream.on('error', (error: any) => {
-            reject(new Error(`文件上传失败: ${error.message}`))
-          })
-
-          readStream.pipe(writeStream)
-        })
-      } catch (error: any) {
-        reject(new Error(`读取本地文件失败: ${error.message}`))
-      }
-    })
+        )
+      })
+    } finally {
+      this.pendingOperations--
+    }
   }
 
+  /**
+   * 获取目录数量
+   * @param dir
+   * @returns
+   */
+  private countFiles(dir: string): number {
+    let count = 0
+    try {
+      const items = readdirSync(dir)
+      for (const item of items) {
+        const fullPath = join(dir, item)
+        const stats = statSync(fullPath)
+        if (stats.isFile()) {
+          count++
+        } else if (stats.isDirectory()) {
+          count += this.countFiles(fullPath)
+        }
+      }
+    } catch (error) {
+      console.log(chalk.yellow(`⚠️ 统计文件时跳过目录: ${dir}`))
+    }
+    return count
+  }
   /**
    * 上传整个目录
    */
@@ -272,118 +315,97 @@ export class SSHTool {
     console.log(chalk.blue('📦 上传目录:'), chalk.gray(`${localPath} → ${remotePath}`))
 
     // 确保远程目录存在
-    if (!(await this.directoryExists(remotePath))) {
-      await this.createDirectory(remotePath)
-    }
+    if (!(await this.directoryExists(remotePath))) await this.createDirectory(remotePath)
 
     // 统计文件数量
-    const countFiles = (dir: string): number => {
-      let count = 0
-      const items = readdirSync(dir)
-
-      for (const item of items) {
-        const fullPath = join(dir, item)
-        const stats = statSync(fullPath)
-
-        if (stats.isFile()) {
-          count++
-        } else if (stats.isDirectory()) {
-          count += countFiles(fullPath)
-        }
-      }
-      return count
+    const totalFiles = this.countFiles(localPath)
+    if (totalFiles === 0) {
+      console.log(chalk.yellow('⚠️ 目录为空，跳过上传'))
+      return
     }
 
-    const totalFiles = countFiles(localPath)
     console.log(chalk.cyan(`📊 总共需要上传 ${totalFiles} 个文件`))
 
     let uploadedFiles = 0
+    Progress1.start('')
+    Progress2.start('')
 
     // 递归上传函数
     const uploadRecursive = async (currentLocalPath: string, currentRemotePath: string): Promise<void> => {
       const items = readdirSync(currentLocalPath)
-
       for (const item of items) {
         const localItemPath = join(currentLocalPath, item)
-        const remoteItemPath = join(currentRemotePath, item.replace(/(["$`\\])/g, '\\$1'))
+        const remoteItemPath = join(currentRemotePath, item).replace(/\//g, '\\')
         const stats = statSync(localItemPath)
 
         if (stats.isFile()) {
           try {
             await this.uploadFile(localItemPath, remoteItemPath)
             uploadedFiles++
-            console.log(chalk.gray(`  进度: ${uploadedFiles}/${totalFiles} 个文件`))
+            Progress1.update(`进度: ${uploadedFiles}/${totalFiles} 个文件`)
           } catch (error) {
             console.log(chalk.red(`❌ 文件上传失败: ${localItemPath}`))
             throw error
           }
         } else if (stats.isDirectory()) {
-          // 创建远程子目录
-          if (!(await this.directoryExists(remoteItemPath))) {
-            await this.createDirectory(remoteItemPath)
-          }
-          // 递归上传子目录
+          if (!(await this.directoryExists(remoteItemPath))) await this.createDirectory(remoteItemPath)
           await uploadRecursive(localItemPath, remoteItemPath)
         }
       }
     }
 
-    await uploadRecursive(localPath, remotePath)
-    console.log(chalk.green(`✅ 目录上传完成，共上传 ${uploadedFiles} 个文件`))
-  }
-
-  /**
-   * 备份远程目录
-   */
-  public async backupDirectory(remotePath: string, backupName: string = new Date().toISOString().replace(/[:.]/g, '-')): Promise<void> {
-    console.log(chalk.blue('💾 创建备份...'))
-
-    // 检查源目录是否存在
-    if (!(await this.directoryExists(remotePath))) {
-      console.log(chalk.yellow('⚠️ 源目录不存在，跳过备份'))
-      return
-    }
-
-    const backupPath = `${remotePath}_backup_${backupName}`
-
-    // 删除已存在的备份
-    if (await this.directoryExists(backupPath)) {
-      console.log(chalk.gray('  删除旧备份...'))
-      await this.executeCommand(`rm -rf "${backupPath.replace(/(["$`\\])/g, '\\$1')}"`)
-    }
-
-    // 创建备份
-    console.log(chalk.gray(`  备份: ${remotePath} → ${backupPath}`))
-    const result = await this.executeCommand(`cp -r "${remotePath.replace(/(["$`\\])/g, '\\$1')}" "${backupPath.replace(/(["$`\\])/g, '\\$1')}"`)
-
-    if (!result.success) {
-      throw new Error(`备份创建失败: ${result.stderr}`)
-    }
-
-    console.log(chalk.green('✅ 备份创建成功'))
-  }
-
-  /**
-   * 测试连接
-   */
-  public async testConnection(): Promise<boolean> {
     try {
-      await this.connect()
-      const result = await this.executeCommand('echo "SSH连接测试成功"')
-      await this.disconnect()
-      return result.success && result.stdout.includes('SSH连接测试成功')
+      await uploadRecursive(localPath, remotePath)
+      Progress1.stop(`进度: ${totalFiles}/${totalFiles} 个文件`)
+      Progress2.stop(chalk.green(`✅ 目录上传完成，共上传 ${uploadedFiles} 个文件`))
     } catch (error) {
-      return false
+      Progress1.stop(chalk.red('❌ 目录上传失败'))
+      Progress2.stop('')
+      throw error
     }
   }
 
   /**
-   * 安全关闭连接
+   * 探测服务器类型
    */
-  public async destroy(): Promise<void> {
-    if (this.connected) {
-      this.disconnect()
+  public async detectServerType(): Promise<'unix' | 'windows' | undefined> {
+    if (this.serverType) return this.serverType
+
+    // 方法1：快速探测
+    const quickProbes = [
+      { command: 'uname -s', type: 'unix' },
+      { command: 'ver', type: 'windows' },
+      { command: 'ls --version', type: 'unix' },
+      { command: 'dir', type: 'windows' }
+    ]
+
+    for (const probe of quickProbes) {
+      try {
+        const result = await this.executeCommand(probe.command, 3000)
+        if (result.success) {
+          this.serverType = probe.type as 'unix' | 'windows'
+          console.log(chalk.green(`✅ 检测到 ${this.serverType} 服务器`))
+          return this.serverType
+        }
+      } catch (error) {
+        // 继续尝试下一个探测命令
+      }
     }
-    // 可以添加其他清理逻辑
+
+    // 方法2：路径风格探测
+    try {
+      const pathResult = await this.executeCommand('echo $PATH')
+      if (pathResult.success) {
+        if (pathResult.stdout.includes('/usr/bin') || pathResult.stdout.includes('/bin')) {
+          this.serverType = 'unix'
+        } else if (pathResult.stdout.includes(':\\')) {
+          this.serverType = 'windows'
+        }
+      }
+    } catch (error) {
+      // 路径探测失败
+    }
+
+    return this.serverType
   }
 }
