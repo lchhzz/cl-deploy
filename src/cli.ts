@@ -106,7 +106,9 @@ class ViewDeployCLI {
 
       // 模板文件路径
       // 写入配置文件
-      let temp = readFileSync(join(configManager.RootPath, 'src', 'deploy.config.ts'), 'utf-8')
+      console.log(configManager.RootPath, 'configManager.RootPath')
+
+      let temp = readFileSync(join(configManager.RootPath, 'deploy.config.ts'), 'utf-8')
 
       if (options.type == 'js') {
         const tempJs = temp.replace(': Array<EnvironmentConfig>', '').replace("import { EnvironmentConfig } from './types/config'", '')

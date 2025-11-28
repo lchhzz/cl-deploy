@@ -17,10 +17,12 @@ export class ConfigManager {
    * 包路径
    */
   public get RootPath() {
+    // 基于当前文件位置计算
     const __filename = fileURLToPath(import.meta.url)
     const __dirname = dirname(__filename)
-    // src/utils -> 包根目录
-    return resolve(__dirname, '..', '..')
+
+    // 直接返回 dist 的父级（包根目录）
+    return resolve(__dirname, '..')
   }
 
   /**
