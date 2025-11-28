@@ -6,11 +6,11 @@
 - 📊 **进度跟踪** - 实时部署进度显示
 - 🎯 **TypeScript** - 完整的类型支持，更好的开发体验
 
-  command: view-deploy|cl-vd
+- command: view-deploy|cl-vd
 
-  初始化配置
-  command init [--type ts|js] [--path <配置文件位置>]
-  部署到开发环境
-  command deploy --env <development>
-  测试 SSH 连接
-  command test --env <环境名称>
+- 初始化配置
+- command init [--type ts|js] [--path <配置文件位置>]
+- 部署到开发环境
+- command deploy --env <development>
+- 测试 SSH 连接
+- command test --env <环境名称>
