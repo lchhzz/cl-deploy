@@ -4,7 +4,7 @@ import { EnvironmentConfig, OptionsModel } from './types/config.js'
 export { Deployer } from './commands/deploy.js'
 import { ConfigManager } from './utils/config.js'
 export { ConfigManager } from './utils/config.js'
-export type { ServerConfig, PathConfig } from './types/config.js'
+export type { EnvironmentConfig } from './types/config.js'
 
 /**
  * 主要的部署类 - 简化使用

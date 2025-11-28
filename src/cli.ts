@@ -31,11 +31,11 @@ class ViewDeployCLI {
     // 基础信息
     this.program.name('view-deploy').description('🚀 前端项目 SSH 部署工具').version('1.0.0')
 
+    // init 命令 - 创建配置文件模板
+    this.program.command('init').description('创建配置文件模板').option('-p, --path <path>', '配置文件位置', 'deploy').option('-t, --type <type>', '配置文件类型', 'ts').action(this.handleInit.bind(this))
+
     // deploy 命令 - 执行部署
     this.program.command('deploy').description('执行部署操作').option('-m, --model <model>', '部署模式', 'development').action(this.handleDeploy.bind(this))
-
-    // init 命令 - 创建配置文件模板
-    this.program.command('init').description('创建配置文件模板').option('-p, --path <path>', '部署模式', 'deploy').action(this.handleInit.bind(this))
 
     // test 命令 - 测试连接
     this.program.command('test').description('测试服务器连接').option('-e, --model <model>', '环境名称', 'development').action(this.handleTest.bind(this))
@@ -62,11 +62,11 @@ class ViewDeployCLI {
         // 显示配置信息
         this.displayConfigInfo(setting)
         // 确认
-        // const confirmed = await this.confirmDeployment(config)
-        // if (!confirmed) {
-        //   console.log(chalk.yellow('❌ 部署已取消'))
-        //   return
-        // }
+        const confirmed = await this.confirmDeployment(config)
+        if (!confirmed) {
+          console.log(chalk.yellow('❌ 部署已取消'))
+          return
+        }
         // 执行部署
         const deployer = new Deployer(setting)
         await deployer.deploy()
@@ -77,12 +77,12 @@ class ViewDeployCLI {
   }
 
   /**
-   * 初始化命令  生成配置文件
+   * 初始化命令 生成配置文件
    */
   private async handleInit(options: handleInitOptions): Promise<void> {
     // 目标文件夹
     const configPath = options.path ? resolve(process.cwd(), options.path) : join(process.cwd(), 'deploy')
-    const configFile = join(configPath, 'deploy.config.js')
+    const configFile = join(configPath, 'deploy.config.' + options.type)
 
     progress.start(chalk.blue('初始化配置...🎯 文件路径:' + configFile))
     try {
@@ -105,10 +105,17 @@ class ViewDeployCLI {
       if (!existsSync(configPath)) mkdirSync(configPath, { recursive: true })
 
       // 模板文件路径
-      const templatePath = join(configManager.RootPath, 'src', 'deploy.config.js')
-      const templateContent = readFileSync(templatePath, 'utf-8')
       // 写入配置文件
-      writeFileSync(configFile, templateContent, 'utf-8')
+      let temp = readFileSync(join(configManager.RootPath, 'src', 'deploy.config.ts'), 'utf-8')
+
+      if (options.type == 'js') {
+        const tempJs = temp.replace(': Array<EnvironmentConfig>', '').replace("import { EnvironmentConfig } from './types/config'", '')
+        writeFileSync(configFile, tempJs, 'utf-8')
+      } else {
+        const tempTs = temp.replace("import { EnvironmentConfig } from './types/config'", "import type { EnvironmentConfig } from '@cl/view-deploy'")
+        writeFileSync(configFile, tempTs, 'utf-8')
+      }
+
       progress.stop(chalk.green(`✅ 配置文件已创建: ${configFile}`))
       // 保存一个路径 包使用
       configManager.createdSetting(configPath)

@@ -1,7 +1,9 @@
+import { EnvironmentConfig } from './types/config'
+
 /**
  * 部署配置
  */
-const config = [
+const config: Array<EnvironmentConfig> = [
   {
     // 环境名称
     name: 'development',

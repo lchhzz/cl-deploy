@@ -1,23 +1,28 @@
 {
   "name": "@cl/view-deploy",
   "version": "1.0.0",
-  "description": "A customizable SSH deployment tool for frontend projects",
+  "description": "一个可自定义的 SSH 部署工具，支持前端项目部署，自动转换 Windows/Unix 命令",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "bin": {
     "view-deploy": "./dist/cli.js",
-    "vd": "./dist/cli.js"
+    "cl-vd": "./dist/cli.js"
   },
   "scripts": {
-    "dev": "tsx src/cli.ts",
+    "cl-vd": "tsx src/cli.ts",
     "build": "tsc",
     "start": "node dist/cli.js",
     "cli": "node dist/cli.js",
-    "deploy": "npm run dev -- deploy",
-    "deploy:init": "npm run dev -- init",
-    "deploy:config": "npm run dev config --",
-    "deploy:test": "npm run dev test --"
+    "deploy": "npm run cl-vd -- deploy",
+    "deploy:init": "npm run cl-vd -- init",
+    "deploy:config": "npm run cl-vd config --",
+    "deploy:test": "npm run cl-vd test --"
   },
   "keywords": [
     "deploy",
@@ -25,7 +30,8 @@
     "automation",
     "cli"
   ],
-  "author": "",
+
+  "author": "cl",
   "license": "MIT",
   "devDependencies": {
     "@types/chokidar": "^1.7.5",

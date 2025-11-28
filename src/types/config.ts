@@ -1,5 +1,3 @@
-// src/types/config.ts
-
 /**
  * 服务器配置接口
  */
@@ -58,6 +56,7 @@ export interface EnvironmentConfig {
 export interface handleInitOptions {
   // 指定相对于项目的生成配置文件路径
   path?: string
+  type: 'ts' | 'js'
 }
 export interface OptionsModel {
   /**
