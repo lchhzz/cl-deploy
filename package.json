@@ -1,5 +1,5 @@
 {
-  "name": "@cl/view-deploy",
+  "name": "@lchhzz/view-deploy",
   "version": "1.0.0",
   "description": "一个可自定义的 SSH 部署工具，支持前端项目部署，自动转换 Windows/Unix 命令",
   "type": "module",
@@ -11,8 +11,11 @@
     "LICENSE"
   ],
   "bin": {
-    "view-deploy": "./dist/cli.js",
-    "cl-vd": "./dist/cli.js"
+    "view-deploy": "dist/cli.js",
+    "cl-vd": "dist/cli.js"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "cl-vd": "tsx src/cli.ts",
@@ -30,7 +33,6 @@
     "automation",
     "cli"
   ],
-
   "author": "cl",
   "license": "MIT",
   "devDependencies": {
@@ -47,5 +49,9 @@
     "commander": "^11.0.0",
     "inquirer": "^9.0.0",
     "ssh2": "^1.17.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://gitee.com/luochuanccc/cl-deploy?source=header_my_projects"
   }
 }
