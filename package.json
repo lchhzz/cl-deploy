@@ -1,6 +1,6 @@
 {
   "name": "@lchhzz/view-deploy",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "一个可自定义的 SSH 部署工具，支持前端项目部署，自动转换 Windows/Unix 命令",
   "type": "module",
   "main": "./dist/index.js",
@@ -27,7 +27,8 @@
     "deploy:init": "npm run dev -- init",
     "deploy:config": "npm run dev config --",
     "deploy:test": "npm run dev test --",
-    "deploy:reset": "npm run dev reset --"
+    "deploy:reset": "npm run dev reset --",
+    "publish": "npm publish --registry=https://registry.npmjs.org/ --access=public"
   },
   "keywords": [
     "deploy",
