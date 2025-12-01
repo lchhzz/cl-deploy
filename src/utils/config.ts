@@ -17,13 +17,29 @@ export class ConfigManager {
    * 包路径
    */
   public get RootPath() {
-    // 基于当前文件位置计算
-    const __filename = fileURLToPath(import.meta.url)
+    try {
+      const __filename = fileURLToPath(import.meta.url)
+      const __dirname = dirname(__filename)
 
-    const __dirname = dirname(__filename)
+      // 检查是否是打包后的环境
+      const possiblePaths = [
+        resolve(__dirname, '../../'), // 默认情况
+        resolve(__dirname, '../'), // 其他可能的结构
+        __dirname // 当前目录
+      ]
 
-    // 直接返回 dist 的父级（包根目录）
-    return resolve(__dirname, '../../')
+      for (const path of possiblePaths) {
+        if (existsSync(resolve(path, 'package.json'))) {
+          return path
+        }
+      }
+
+      // 回退方案
+      return resolve(__dirname, '../../')
+    } catch (error) {
+      console.warn('无法自动检测包路径，使用回退方案')
+      return process.cwd() // 返回当前工作目录
+    }
   }
 
   /**

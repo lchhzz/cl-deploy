@@ -108,25 +108,23 @@ class ViewDeployCLI {
 
       // 检查并创建 deploy 文件夹
       if (!existsSync(configPath)) mkdirSync(configPath, { recursive: true })
-      const paths = [join(configManager.RootPath, 'deploy.config.ts'), join(configManager.RootPath, 'src', 'deploy.config.ts')]
 
-      let _settingFile = ''
-
-      for (const path of paths) {
-        if (existsSync(path)) {
-          _settingFile = path
-        }
-      }
       // 模板文件路径
       // 写入配置文件
-      let temp = readFileSync(_settingFile, 'utf-8')
+      const _paths = ['src/deploy.config.ts', 'dist/deploy.config.ts']
 
-      if (options.type == 'js') {
-        const tempJs = temp.replace(': Array<EnvironmentConfig>', '').replace("import { EnvironmentConfig } from './types/config'", '')
-        writeFileSync(configFile, tempJs, 'utf-8')
-      } else {
-        const tempTs = temp.replace("import { EnvironmentConfig } from './types/config'", "import type { EnvironmentConfig } from '@cl/view-deploy'")
-        writeFileSync(configFile, tempTs, 'utf-8')
+      for (const p of _paths) {
+        if (existsSync(join(configManager.RootPath, p))) {
+          const temp = readFileSync(join(configManager.RootPath, 'deploy.config.ts'), 'utf-8')
+          if (options.type == 'js') {
+            const tempJs = temp.replace(': Array<EnvironmentConfig>', '').replace("import { EnvironmentConfig } from './types/config'", '')
+            writeFileSync(configFile, tempJs, 'utf-8')
+          } else {
+            const tempTs = temp.replace("import { EnvironmentConfig } from './types/config'", "import type { EnvironmentConfig } from '@cl/view-deploy'")
+            writeFileSync(configFile, tempTs, 'utf-8')
+          }
+          break
+        }
       }
 
       progress.stop(chalk.green(`✅ 配置文件已创建: ${configFile}`))

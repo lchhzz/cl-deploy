@@ -1,0 +1,9 @@
+{
+  "version": "v1",
+  "packages": {
+    "@lchhzz/view-deploy": {
+      "signature": "882fef2e03bcadb8a299e2b7825a8ed4",
+      "file": true
+    }
+  }
+}
