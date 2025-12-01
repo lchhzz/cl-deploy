@@ -108,11 +108,18 @@ class ViewDeployCLI {
 
       // 检查并创建 deploy 文件夹
       if (!existsSync(configPath)) mkdirSync(configPath, { recursive: true })
+      const paths = [join(configManager.RootPath, 'deploy.config.ts'), join(configManager.RootPath, 'src', 'deploy.config.ts')]
 
+      let _settingFile = ''
+
+      for (const path of paths) {
+        if (existsSync(path)) {
+          _settingFile = path
+        }
+      }
       // 模板文件路径
       // 写入配置文件
-
-      let temp = readFileSync(join(configManager.RootPath, 'src', 'deploy.config.ts'), 'utf-8')
+      let temp = readFileSync(_settingFile, 'utf-8')
 
       if (options.type == 'js') {
         const tempJs = temp.replace(': Array<EnvironmentConfig>', '').replace("import { EnvironmentConfig } from './types/config'", '')

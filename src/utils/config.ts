@@ -138,4 +138,6 @@ export class ConfigManager {
     // const data = JSON.parse(content)
     // console.log(data, 'data')
   }
+
+  public getFile() {}
 }
