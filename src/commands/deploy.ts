@@ -37,7 +37,7 @@ export class Deployer {
 
   /**
    * 修改文件名称
-   * @param newName 新上传的文件夹名称
+   * @param newName 新文件夹名称
    */
   private async laterUpdate(newName: string) {
     const remotePath = this.config.paths.remotePath
@@ -110,6 +110,20 @@ export class Deployer {
   }
 
   /**
+   * 重置部署
+   */
+  public async resetDeployment() {
+    try {
+      const _projectName = this.config.paths.projectName
+      const fileName = join(_projectName, this.config.paths.projectName)
+      await this.sshTool.delFile(fileName)
+      await this.sshTool.editDirectoryName(join(_projectName, 'old_' + this.config.paths.projectName), this.config.paths.projectName)
+    } catch {
+      throw new Error('重置部署失败，需要手动操作')
+    }
+  }
+
+  /**
    * 处理部署错误
    */
   private async handleDeploymentError(error: any): Promise<void> {
@@ -157,7 +171,6 @@ export class Deployer {
       this.sshTool.disconnect()
     }
   }
-
   /**
    * 验证部署准备
    * 验证编译文件是否存在
@@ -177,12 +190,5 @@ export class Deployer {
       throw new Error(`本地目录为空: ${localPath}`)
     }
     console.log('✅ 验证通过')
-  }
-
-  /**
-   * 模拟延迟
-   */
-  private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms))
   }
 }

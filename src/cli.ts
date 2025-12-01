@@ -39,6 +39,7 @@ class ViewDeployCLI {
 
     // test 命令 - 测试连接
     this.program.command('test').description('测试服务器连接').option('-e, --model <model>', '环境名称', 'development').action(this.handleTest.bind(this))
+
     // reset - 还原部署
     this.program.command('reset').description('还原部署').option('-e, --model <model>', '还原部署的环境', 'development').action(this.handleReset.bind(this))
 
@@ -75,6 +76,8 @@ class ViewDeployCLI {
       }
     } catch (error: any) {
       this.handleError(error)
+      console.log(chalk.red('部署失败，正在重置部署'))
+      this.handleReset(options)
     }
   }
 
@@ -166,7 +169,19 @@ class ViewDeployCLI {
    * 还原部署
    * @param options
    */
-  private async handleReset(options: OptionsModel) {}
+  private async handleReset(options: OptionsModel) {
+    progress.start('加载配置...')
+    const config: Array<EnvironmentConfig> | void = await configManager.loadConfig(options.model)
+    if (!config) return
+    progress.stop('配置加载完成...')
+
+    for (const setting of config) {
+      // 显示配置信息
+      this.displayConfigInfo(setting)
+      const deployer = new Deployer(setting)
+      await deployer.resetDeployment()
+    }
+  }
   /**
    * 显示配置信息
    */

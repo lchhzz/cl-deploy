@@ -124,7 +124,6 @@ export class SSHTool {
       })
 
       this.client.on('error', error => {
-        
         reject(new Error(`SSH 连接失败: ${error.message}`))
       })
 
@@ -209,8 +208,6 @@ export class SSHTool {
     if (!(await this.directoryExists(path))) return console.log(chalk.yellow('未找到要修改的文件目录'))
 
     const _path = _PathUtils.normalizeRemotePath(path, this.serverType)
-    console.log(_path, '_path')
-    console.log(newName, 'newName')
 
     const command = `powershell -Command "Rename-Item -Path '${_path}' -NewName '${newName}' -Force"`
     const result = await this.executeCommand(command)
@@ -231,9 +228,7 @@ export class SSHTool {
    */
   public async delFile(path: string) {
     if (!(await this.directoryExists(path))) return console.log(chalk.yellow('未找到文件，无需删除'))
-
     const _path = _PathUtils.normalizeRemotePath(path, this.serverType)
-
     const command = `powershell -Command "Remove-Item -path "${_path}"  -Recurse -Force"`
     const result = await this.executeCommand(command)
     if (!result.success) {

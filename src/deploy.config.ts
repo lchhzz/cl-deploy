@@ -9,7 +9,7 @@ const config: Array<EnvironmentConfig> = [
     name: 'development',
     // 服务器配置
     server: {
-      host: '114.132.223.133',
+      host: '',
       // 默认22
       port: 22,
       // 登陆信息
@@ -24,9 +24,9 @@ const config: Array<EnvironmentConfig> = [
       // 本地路径
       localDist: './dist',
       // 上传路径
-      remotePath: '/usr/local/nginx/html/dev',
+      remotePath: '/usr/local',
       // 上传文件夹
-      projectName: 'mch-b'
+      projectName: ''
     },
 
     // 部署选项
