@@ -4,7 +4,7 @@ import chalk from 'chalk'
 import { Command } from 'commander'
 import { ConfigManager } from './utils/config.js'
 import { Deployer } from './index.js'
-import { join, resolve } from 'path'
+import { extname, join, resolve } from 'path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import inquirer from 'inquirer'
 import { EnvironmentConfig, handleInitOptions, OptionsModel } from './types/config.js'
@@ -111,22 +111,30 @@ class ViewDeployCLI {
 
       // 模板文件路径
       // 写入配置文件
-      const _paths = ['src/deploy.config.ts', 'dist/deploy.config.ts']
+      const _paths = ['deploy.config.ts', 'src/deploy.config.ts', 'deploy.config.js', 'dist/deploy.config.js']
 
       for (const p of _paths) {
         if (existsSync(join(configManager.RootPath, p))) {
-          const temp = readFileSync(join(configManager.RootPath, 'deploy.config.ts'), 'utf-8')
+          const temp = readFileSync(join(configManager.RootPath, p), 'utf-8')
+
           if (options.type == 'js') {
-            const tempJs = temp.replace(': Array<EnvironmentConfig>', '').replace("import { EnvironmentConfig } from './types/config'", '')
+            const tempJs = temp.replace(': Array<EnvironmentConfig>', '').replace("import { EnvironmentConfig } from './types/config'", '').replace(/\;/g, '')
             writeFileSync(configFile, tempJs, 'utf-8')
           } else {
-            const tempTs = temp.replace("import { EnvironmentConfig } from './types/config'", "import type { EnvironmentConfig } from '@cl/view-deploy'")
+            let tempTs: string
+            if (extname(p) == '.js') {
+              tempTs = temp
+                .replace(/^/, `import type { EnvironmentConfig } from '@cl/view-deploy'\n\n`)
+                .replace(/const\s+config\s*=/g, 'const config: Array<EnvironmentConfig> =')
+                .replace(/module\.exports\s*=\s*config/, 'export default config')
+            } else {
+              tempTs = temp.replace("import { EnvironmentConfig } from './types/config'", "import type { EnvironmentConfig } from '@cl/view-deploy'").replace(/\;/g, '')
+            }
             writeFileSync(configFile, tempTs, 'utf-8')
           }
           break
         }
       }
-
       progress.stop(chalk.green(`✅ 配置文件已创建: ${configFile}`))
       // 保存一个路径 包使用
       configManager.createdSetting(configPath)

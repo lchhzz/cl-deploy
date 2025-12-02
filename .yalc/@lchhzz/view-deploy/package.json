@@ -1,6 +1,6 @@
 {
   "name": "@lchhzz/view-deploy",
-  "version": "2.0.1",
+  "version": "1.1.2",
   "description": "一个可自定义的 SSH 部署工具，支持前端项目部署，自动转换 Windows/Unix 命令",
   "type": "module",
   "main": "./dist/index.js",
@@ -38,6 +38,7 @@
   "author": "cl",
   "license": "MIT",
   "dependencies": {
+    "@lchhzz/view-deploy": "file:.yalc/@lchhzz/view-deploy",
     "chalk": "^4.1.2",
     "chokidar": "^3.5.3",
     "commander": "^9.5.0",
@@ -51,5 +52,5 @@
     "type": "git",
     "url": "https://gitee.com/luochuanccc/cl-deploy"
   },
-  "yalcSig": "882fef2e03bcadb8a299e2b7825a8ed4"
+  "yalcSig": "5f7a85be7fabdbb268aa9efa6e73ad2f"
 }

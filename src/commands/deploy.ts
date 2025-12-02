@@ -106,7 +106,7 @@ export class Deployer {
   private async completeDeployment(): Promise<void> {
     console.log(chalk.gray('='.repeat(50)))
     console.log(chalk.green('🎉 部署完成！'))
-    console.log(chalk.blue(`🌐 访问地址: http://${this.config.server.host}/${this.config.paths.projectName}/`))
+    console.log(chalk.blue(`🌐 访问地址: http://${this.config.server.host}/${this.config.paths.remotePath}/${this.config.paths.projectName}`))
   }
 
   /**

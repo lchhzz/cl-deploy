@@ -14,3 +14,5 @@
 - command deploy --env <development>
 - 测试 SSH 连接
 - command test --env <环境名称>
+- 重置
+- command reset --env <环境名称>

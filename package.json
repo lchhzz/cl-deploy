@@ -1,6 +1,6 @@
 {
   "name": "@lchhzz/view-deploy",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "一个可自定义的 SSH 部署工具，支持前端项目部署，自动转换 Windows/Unix 命令",
   "type": "module",
   "main": "./dist/index.js",
@@ -21,7 +21,7 @@
     "dev": "tsx src/cli.ts",
     "build": "tsc",
     "cli": "node dist/cli.js",
-    "postinstall": "node dist/scripts/setup.js && npm run deploy:init",
+    "postinstall": "node dist/scripts/setup.js",
     "deploy": "npm run dev -- deploy",
     "deploy:init": "npm run dev -- init",
     "deploy:config": "npm run dev config --",

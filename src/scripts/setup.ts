@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { execSync } from 'child_process'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { resolve } from 'path'
 
@@ -65,12 +66,12 @@ function addDeployScripts() {
       deploy: 'view-deploy deploy',
       'deploy:init': 'view-deploy init',
       'deploy:test': 'view-deploy test',
-      'deploy:config': 'view-deploy config'
+      'deploy:config': 'view-deploy config',
+      'deploy:reset': 'view-deploy reset'
     }
 
     pkg.scripts = pkg.scripts || {}
     let addedCount = 0
-
     for (const [name, command] of Object.entries(deployScripts)) {
       if (!pkg.scripts[name]) {
         pkg.scripts[name] = command
@@ -78,46 +79,32 @@ function addDeployScripts() {
         console.log(`✅ 已添加脚本: ${name}`)
       }
     }
-
     if (addedCount > 0) {
       writeFileSync(packageJsonPath, JSON.stringify(pkg, null, 2))
       console.log(`🎉 成功添加 ${addedCount} 个部署脚本到 package.json`)
-
-      // 创建默认配置文件
-      const configPath = resolve(projectRoot, 'deploy.config.json')
-      if (!existsSync(configPath)) {
-        const defaultConfig = {
-          $schema: './node_modules/@lchhzz/view-deploy/schema.json',
-          projectName: pkg.name || 'my-project',
-          privateKey: '~/.ssh/id_rsa',
-          scripts: {
-            build: 'npm run build',
-            install: 'npm install'
-          },
-          test: {
-            host: 'test.example.com',
-            username: 'root',
-            port: 22,
-            deployPath: '/home/www/test'
-          },
-          prod: {
-            host: 'prod.example.com',
-            username: 'root',
-            port: 22,
-            deployPath: '/home/www/prod'
-          }
-        }
-        writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2))
-        console.log('✅ 已创建默认配置文件 deploy.config.json')
-      }
     } else {
       console.log('📝 部署脚本已存在，无需添加')
     }
+    silentAutoInit()
   } catch (error: any) {
     console.error('❌ 添加部署脚本失败:', error.message)
   }
 }
 
+function silentAutoInit() {
+  try {
+    const projectRoot = getProjectRoot()
+    const localCliPath = resolve(projectRoot, 'node_modules', '@lchhzz', 'view-deploy', 'dist', 'cli.js')
+
+    if (existsSync(localCliPath)) {
+      console.log('🚀 自动运行初始化配置...')
+      execSync(`node ${localCliPath} init`)
+      console.log('✅ 自动初始化完成！')
+    }
+  } catch (error) {
+    console.log('⚠️  自动初始化失败，请手动运行: npm run deploy:init')
+  }
+}
 addDeployScripts()
 
 console.log(`
@@ -125,4 +112,5 @@ console.log(`
 npm run deploy:init    # 初始化配置文件
 npm run deploy:test    # 测试部署配置
 npm run deploy         # 执行部署
+npm run reset         # 重置部署
 `)

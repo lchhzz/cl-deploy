@@ -1,10 +1,10 @@
 // src/utils/config.ts
-import { readFileSync, existsSync, writeFileSync } from 'fs'
+import { readFileSync, existsSync, writeFileSync, unlinkSync } from 'fs'
 import { dirname, extname, join, resolve } from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
 import { EnvironmentConfig } from '../types/config'
 import chalk from 'chalk'
-
+import { tmpdir } from 'os'
 /**
  * 配置管理器类
  * 职责：加载、验证、管理部署配置
@@ -44,11 +44,10 @@ export class ConfigManager {
 
   /**
    * 查找配置文件
-   * 支持多种配置文件格式和位置
    */
-  private findConfigFile(cwd: string = process.cwd()): string | null {
+  private findConfigFile(cwd: string = join(process.cwd(), 'deploy')): string | null {
     // 配置文件的查找优先级
-    const configFiles = ['deploy.config.js']
+    const configFiles = ['deploy.config.js', 'deploy.config.ts']
     for (const configFile of configFiles) {
       const fullPath = join(cwd, configFile)
       if (existsSync(fullPath)) {
@@ -64,34 +63,72 @@ export class ConfigManager {
    */
   public async loadConfig(model?: string): Promise<Array<EnvironmentConfig> | void> {
     const fileUrl = pathToFileURL(resolve(this._settingPath)).href
-    // 获取保存的配置路径
-    const setting = await import(fileUrl)
-    const setting_info = setting.default || setting
-    const deploy_path = setting_info.config_path
-    const configPath = this.findConfigFile(deploy_path) || ''
-    if (!configPath) return console.log(chalk.red('\r未找到配置文件'))
 
+    const setting = await import(fileUrl, { assert: { type: 'json' } })
+    const setting_info = setting.default || setting
+
+    let deploy_path = setting_info.config_path
+
+    const configPath = this.findConfigFile(deploy_path) || ''
+
+    if (!configPath) throw new Error(chalk.red('\r未找到配置文件'))
+    // 加载配置
     const config = await this.loadConfigFile(configPath, model)
     // 验证配置
     this.validateConfig(config)
 
     return config
   }
+  async loadTSConfig(filePath: string) {
+    const content = readFileSync(filePath, 'utf8')
+    // 简单移除 TypeScript 语法
+    const jsCode = content
+      // 移除 import type 行
+      .replace(/import\s+type\s+\{[^}]+\}\s+from\s+['"][^'"]+['"];?\s*/g, '')
 
+      // 移除类型注解
+      .replace(/\:\s*Array\<[^>]+\>/g, '')
+
+      // 转换导出
+      .replace(/export\s+default\s+config/, 'module.exports = config')
+
+      // 清理多余空行
+      .replace(/\n\s*\n/g, '\n')
+    // 创建临时文件
+    const tempFile = join(tmpdir(), `temp-config-${Date.now()}.js`)
+
+    writeFileSync(tempFile, jsCode, 'utf8')
+
+    try {
+      const fileUrl = pathToFileURL(tempFile).href
+
+      const module = await import(fileUrl)
+      return module.default || module
+    } finally {
+      try {
+        unlinkSync(tempFile)
+      } catch {}
+    }
+  }
   /**
    * 加载具体的配置文件
    */
   private async loadConfigFile(configPath: string, model?: string): Promise<Array<EnvironmentConfig>> {
     const ext = extname(configPath)
+    const fileUrl = pathToFileURL(resolve(configPath)).href
+    let data = []
     if (ext === '.js') {
-      const fileUrl = pathToFileURL(resolve(configPath)).href
       const importedModule = await import(fileUrl)
-      const data = importedModule.default || importedModule
-      const ls: Array<EnvironmentConfig> = data.filter((v: EnvironmentConfig) => (model ? v.name == model : v.name))
-      return ls
+      data = importedModule.default || importedModule
+    }
+    if (ext == '.ts') {
+      data = await this.loadTSConfig(configPath)
     } else {
       throw new Error(chalk.red(`不支持的配置文件格式: ${ext}`))
     }
+
+    const ls: Array<EnvironmentConfig> = data.filter((v: EnvironmentConfig) => (model ? v.name == model : v.name))
+    return ls
   }
 
   /**
@@ -133,14 +170,11 @@ export class ConfigManager {
   public getSetting(key: string) {
     const content = readFileSync(this._settingPath, 'utf-8')
     const data = JSON.parse(content)
-    // 支持点分隔的属性路径，如 'user.name'
     const properties = key.split('.')
     let result = data
     for (const prop of properties) {
       if (result && typeof result === 'object' && prop in result) result = result[prop]
     }
-    console.log(result, 'result')
-
     return result
   }
 
