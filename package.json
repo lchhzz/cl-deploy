@@ -1,6 +1,6 @@
 {
   "name": "@lchhzz/view-deploy",
-  "version": "1.1.2",
+  "version": "1.1.7",
   "description": "一个可自定义的 SSH 部署工具，支持前端项目部署，自动转换 Windows/Unix 命令",
   "type": "module",
   "main": "./dist/index.js",
@@ -22,12 +22,13 @@
     "build": "tsc",
     "cli": "node dist/cli.js",
     "postinstall": "node dist/scripts/setup.js",
+    "preuninstall": "node dist/scripts/uninstall.js",
     "deploy": "npm run dev -- deploy",
     "deploy:init": "npm run dev -- init",
     "deploy:config": "npm run dev config --",
     "deploy:test": "npm run dev test --",
     "deploy:reset": "npm run dev reset --",
-    "pu": "npm publish --registry=https://registry.npmjs.org/ --access=public"
+    "pu": "npm run build &&  npm publish --registry=https://registry.npmjs.org/ --access=public"
   },
   "keywords": [
     "deploy",
@@ -38,6 +39,7 @@
   "author": "cl",
   "license": "MIT",
   "devDependencies": {
+    "@lchhzz/view-deploy": "file:.yalc/@lchhzz/view-deploy",
     "@types/chokidar": "^1.7.5",
     "@types/inquirer": "^9.0.0",
     "@types/node": "^20.0.0",
@@ -46,7 +48,6 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "@lchhzz/view-deploy": "file:.yalc/@lchhzz/view-deploy",
     "chalk": "^4.1.2",
     "chokidar": "^3.5.3",
     "commander": "^9.5.0",

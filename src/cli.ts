@@ -45,7 +45,7 @@ class ViewDeployCLI {
 
     // 默认命令（当没有提供子命令时）
     this.program.action(() => {
-      console.log(chalk.blue('📦 @cl/view-deploy'))
+      console.log(chalk.blue('📦 @lchhzz/view-deploy'))
       console.log('使用 --help 查看可用命令')
       this.program.outputHelp()
     })
@@ -124,11 +124,11 @@ class ViewDeployCLI {
             let tempTs: string
             if (extname(p) == '.js') {
               tempTs = temp
-                .replace(/^/, `import type { EnvironmentConfig } from '@cl/view-deploy'\n\n`)
+                .replace(/^/, `import type { EnvironmentConfig } from '@lchhzz/view-deploy'\n\n`)
                 .replace(/const\s+config\s*=/g, 'const config: Array<EnvironmentConfig> =')
                 .replace(/module\.exports\s*=\s*config/, 'export default config')
             } else {
-              tempTs = temp.replace("import { EnvironmentConfig } from './types/config'", "import type { EnvironmentConfig } from '@cl/view-deploy'").replace(/\;/g, '')
+              tempTs = temp.replace("import { EnvironmentConfig } from './types/config'", "import type { EnvironmentConfig } from '@lchhzz/view-deploy'").replace(/\;/g, '')
             }
             writeFileSync(configFile, tempTs, 'utf-8')
           }

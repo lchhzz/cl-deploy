@@ -3,3 +3,6 @@ dist/
 deploy/
 *.tsbuildinfo
 *.tgz
+*.lock
+.vscode/
+.yalc/
