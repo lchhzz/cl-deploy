@@ -211,7 +211,6 @@ export class SSHTool {
 
     const command = `powershell -Command "Rename-Item -Path '${_path}' -NewName '${newName}' -Force"`
     const result = await this.executeCommand(command)
-    console.log(result, 'result')
 
     if (!result.success) {
       if (result.stderr.includes('Cannot create path')) {
