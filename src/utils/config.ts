@@ -62,12 +62,15 @@ export class ConfigManager {
    * 加载配置
    */
   public async loadConfig(model?: string): Promise<Array<EnvironmentConfig> | void> {
-    const fileUrl = pathToFileURL(resolve(this._settingPath)).href
+    let deploy_path
+    if (existsSync(this._settingPath)) {
+      const fileUrl = pathToFileURL(resolve(this._settingPath)).href
 
-    const setting = JSON.parse(readFileSync(new URL(fileUrl), 'utf8'))
-    const setting_info = setting.default || setting
+      const setting = JSON.parse(readFileSync(new URL(fileUrl), 'utf8'))
+      const setting_info = setting.default || setting
 
-    let deploy_path = setting_info.config_path
+      deploy_path = setting_info.config_path
+    }
 
     const configPath = this.findConfigFile(deploy_path) || ''
 
