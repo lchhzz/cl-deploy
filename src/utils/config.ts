@@ -64,7 +64,7 @@ export class ConfigManager {
   public async loadConfig(model?: string): Promise<Array<EnvironmentConfig> | void> {
     const fileUrl = pathToFileURL(resolve(this._settingPath)).href
 
-    const setting = await import(fileUrl, { assert: { type: 'json' } })
+    const setting = JSON.parse(readFileSync(new URL(fileUrl), 'utf8'))
     const setting_info = setting.default || setting
 
     let deploy_path = setting_info.config_path
