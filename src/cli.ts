@@ -32,16 +32,33 @@ class ViewDeployCLI {
     this.program.name('view-deploy').description('🚀 前端项目 SSH 部署工具').version('1.0.0')
 
     // init 命令 - 创建配置文件模板
-    this.program.command('init').description('创建配置文件模板').option('-p, --path <path>', '配置文件位置', 'deploy').option('-t, --type <type>', '配置文件类型', 'ts').action(this.handleInit.bind(this))
+    this.program
+      .command('init')
+      .description('创建配置文件模板')
+      .option('-p, --path <path>', '配置文件位置', 'deploy')
+      .option('-t, --type <type>', '配置文件类型', 'ts')
+      .action(this.handleInit.bind(this))
 
     // deploy 命令 - 执行部署
-    this.program.command('deploy').description('执行部署操作').option('-m, --model <model>', '部署模式', 'development').action(this.handleDeploy.bind(this))
+    this.program
+      .command('deploy')
+      .description('执行部署操作')
+      .option('-m, --model <model>', '部署模式', 'development')
+      .action(this.handleDeploy.bind(this))
 
     // test 命令 - 测试连接
-    this.program.command('test').description('测试服务器连接').option('-e, --model <model>', '环境名称', 'development').action(this.handleTest.bind(this))
+    this.program
+      .command('test')
+      .description('测试服务器连接')
+      .option('-e, --model <model>', '环境名称', 'development')
+      .action(this.handleTest.bind(this))
 
     // reset - 还原部署
-    this.program.command('reset').description('还原部署').option('-e, --model <model>', '还原部署的环境', 'development').action(this.handleReset.bind(this))
+    this.program
+      .command('reset')
+      .description('还原部署')
+      .option('-e, --model <model>', '还原部署的环境', 'development')
+      .action(this.handleReset.bind(this))
 
     // 默认命令（当没有提供子命令时）
     this.program.action(() => {
@@ -65,11 +82,11 @@ class ViewDeployCLI {
         // 显示配置信息
         this.displayConfigInfo(setting)
         // 确认
-        const confirmed = await this.confirmDeployment(config)
-        if (!confirmed) {
-          console.log(chalk.yellow('❌ 部署已取消'))
-          return
-        }
+        // const confirmed = await this.confirmDeployment(config)
+        // if (!confirmed) {
+        //   console.log(chalk.yellow('❌ 部署已取消'))
+        //   return
+        // }
         // 执行部署
         const deployer = new Deployer(setting)
         await deployer.deploy()
@@ -86,7 +103,9 @@ class ViewDeployCLI {
    */
   private async handleInit(options: handleInitOptions): Promise<void> {
     // 目标文件夹
-    const configPath = options.path ? resolve(process.cwd(), options.path) : join(process.cwd(), 'deploy')
+    const configPath = options.path
+      ? resolve(process.cwd(), options.path)
+      : join(process.cwd(), 'deploy')
     const configFile = join(configPath, 'deploy.config.' + options.type)
 
     progress.start(chalk.blue('初始化配置...🎯 文件路径:' + configFile))
@@ -111,14 +130,22 @@ class ViewDeployCLI {
 
       // 模板文件路径
       // 写入配置文件
-      const _paths = ['deploy.config.ts', 'src/deploy.config.ts', 'deploy.config.js', 'dist/deploy.config.js']
+      const _paths = [
+        'deploy.config.ts',
+        'src/deploy.config.ts',
+        'deploy.config.js',
+        'dist/deploy.config.js'
+      ]
 
       for (const p of _paths) {
         if (existsSync(join(configManager.RootPath, p))) {
           const temp = readFileSync(join(configManager.RootPath, p), 'utf-8')
 
           if (options.type == 'js') {
-            const tempJs = temp.replace(': Array<EnvironmentConfig>', '').replace("import { EnvironmentConfig } from './types/config'", '').replace(/\;/g, '')
+            const tempJs = temp
+              .replace(': Array<EnvironmentConfig>', '')
+              .replace("import { EnvironmentConfig } from './types/config'", '')
+              .replace(/\;/g, '')
             writeFileSync(configFile, tempJs, 'utf-8')
           } else {
             let tempTs: string
@@ -128,7 +155,12 @@ class ViewDeployCLI {
                 .replace(/const\s+config\s*=/g, 'const config: Array<EnvironmentConfig> =')
                 .replace(/module\.exports\s*=\s*config/, 'export default config')
             } else {
-              tempTs = temp.replace("import { EnvironmentConfig } from './types/config'", "import type { EnvironmentConfig } from '@lchhzz/view-deploy'").replace(/\;/g, '')
+              tempTs = temp
+                .replace(
+                  "import { EnvironmentConfig } from './types/config'",
+                  "import type { EnvironmentConfig } from '@lchhzz/view-deploy'"
+                )
+                .replace(/\;/g, '')
             }
             writeFileSync(configFile, tempTs, 'utf-8')
           }

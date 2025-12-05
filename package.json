@@ -1,6 +1,6 @@
 {
   "name": "@lchhzz/view-deploy",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "一个可自定义的 SSH 部署工具，支持前端项目部署，自动转换 Windows/Unix 命令",
   "type": "module",
   "main": "./dist/index.js",
