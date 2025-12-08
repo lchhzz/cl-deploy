@@ -94,7 +94,14 @@ function addDeployScripts() {
 function silentAutoInit() {
   try {
     const projectRoot = getProjectRoot()
-    const localCliPath = resolve(projectRoot, 'node_modules', '@lchhzz', 'view-deploy', 'dist', 'cli.js')
+    const localCliPath = resolve(
+      projectRoot,
+      'node_modules',
+      '@lchhzz',
+      'view-deploy',
+      'dist',
+      'cli.js'
+    )
 
     if (!existsSync(localCliPath)) {
       console.log('🚀 自动运行初始化配置...')

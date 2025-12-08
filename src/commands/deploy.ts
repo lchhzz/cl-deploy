@@ -115,9 +115,10 @@ export class Deployer {
   public async resetDeployment() {
     try {
       const _projectName = this.config.paths.projectName
-      const fileName = join(_projectName, this.config.paths.projectName)
+      const remotePath = this.config.paths.remotePath
+      const fileName = join(remotePath, _projectName)
       await this.sshTool.delFile(fileName)
-      await this.sshTool.editDirectoryName(join(_projectName, 'old_' + this.config.paths.projectName), this.config.paths.projectName)
+      await this.sshTool.editDirectoryName(join(remotePath, 'old_' + this.config.paths.projectName), this.config.paths.projectName)
     } catch {
       throw new Error('重置部署失败，需要手动操作')
     }

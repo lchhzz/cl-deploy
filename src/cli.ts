@@ -3,7 +3,7 @@
 import chalk from 'chalk'
 import { Command } from 'commander'
 import { ConfigManager } from './utils/config.js'
-import { Deployer } from './index.js'
+import { Deployer } from './commands/deploy.js'
 import { extname, join, resolve } from 'path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import inquirer from 'inquirer'
@@ -94,7 +94,7 @@ class ViewDeployCLI {
     } catch (error: any) {
       this.handleError(error)
       console.log(chalk.red('部署失败，正在重置部署'))
-      this.handleReset(options)
+      await this.handleReset(options)
     }
   }
 
@@ -185,26 +185,26 @@ class ViewDeployCLI {
       const config: Array<EnvironmentConfig> | void = await configManager.loadConfig(options.model)
       if (!config) return
       progress.stop(chalk.cyan('🔗 测试连接中...'))
-      const ErrerServe: Array<string> = []
+      const ErrorServe: Array<string> = []
       const SuccessServe: Array<string> = []
       for (const c of config) {
         try {
           const deployer = new Deployer(c)
           const success = await deployer.testConnection()
           if (!success) {
-            ErrerServe.push(c.server.host)
+            ErrorServe.push(c.server.host)
           } else {
             SuccessServe.push(c.server.host)
           }
         } catch (error: any) {
-          ErrerServe.push(c.server.host)
+          ErrorServe.push(c.server.host)
         }
       }
-      if (ErrerServe.length) {
-        progress.stop(chalk.red('❌ 连接失败：' + ErrerServe) + '\n')
+      if (ErrorServe.length) {
+        progress.stop(chalk.red('❌ 连接失败：' + ErrorServe.join(', ')) + '\n')
         process.exit(1)
       } else {
-        progress.stop(chalk.green('✅ 连接成功：' + SuccessServe) + '\n')
+        progress.stop(chalk.green('✅ 连接成功：' + SuccessServe.join(', ')) + '\n')
       }
     } catch (error: any) {
       this.handleError(error)

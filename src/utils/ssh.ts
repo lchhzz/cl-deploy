@@ -114,6 +114,7 @@ export class SSHTool {
       if (this.connected) {
         console.log(chalk.red('SSH 连接已存在\n'))
         resolve()
+        return
       }
 
       this.client.on('ready', async () => {
@@ -174,14 +175,23 @@ export class SSHTool {
     })
   }
   /**
+   * 根据服务器类型选择命令
+   */
+  private platformCommand(windowsCmd: string, unixCmd: string) {
+    return this.serverType === 'windows' ? windowsCmd : unixCmd
+  }
+  /**
    * 检查远程目录是否存在
    */
   public async directoryExists(escapedPath: string): Promise<boolean> {
     try {
       const _path = _PathUtils.normalizeRemotePath(escapedPath, this.serverType)
-      const psCommand = `powershell -Command "Test-Path -Path '${_path}'"`
-      const result = await this.executeCommand(psCommand)
-      return result.stdout == 'True'
+      const command = this.platformCommand(
+        `powershell -Command "Test-Path -Path '${_path}'"`,
+        `test -d '${_path}' && echo 'true' || echo 'false'`
+      )
+      const result = await this.executeCommand(command)
+      return this.serverType === 'windows' ? result.stdout === 'True' : result.stdout.includes('true')
     } catch (error) {
       return false
     }
@@ -191,10 +201,13 @@ export class SSHTool {
    */
   public async createDirectory(remotePath: string): Promise<void> {
     const _path = _PathUtils.normalizeRemotePath(remotePath, this.serverType)
-    const command = `powershell -Command "New-Item -ItemType Directory -Path '${_path}' -Force"`
+    const command = this.platformCommand(
+      `powershell -Command "New-Item -ItemType Directory -Path '${_path}' -Force"`,
+      `mkdir -p '${_path}'`
+    )
     const result = await this.executeCommand(command)
     if (!result.success) {
-      if (result.stderr.includes('Cannot create path')) {
+      if (result.stderr.includes('Cannot create path') || result.stderr.includes('Permission denied')) {
         throw new Error(`创建目录失败: 路径无效或权限不足`)
       }
       throw new Error(`创建目录失败: ${result.stderr}`)
@@ -208,12 +221,17 @@ export class SSHTool {
     if (!(await this.directoryExists(path))) return console.log(chalk.yellow('未找到要修改的文件目录'))
 
     const _path = _PathUtils.normalizeRemotePath(path, this.serverType)
+    const parentPath = _PathUtils.dirname(_path)
+    const newPath = _PathUtils.join(parentPath, newName)
 
-    const command = `powershell -Command "Rename-Item -Path '${_path}' -NewName '${newName}' -Force"`
+    const command = this.platformCommand(
+      `powershell -Command "Rename-Item -Path '${_path}' -NewName '${newName}' -Force"`,
+      `mv '${_path}' '${newPath}'`
+    )
     const result = await this.executeCommand(command)
 
     if (!result.success) {
-      if (result.stderr.includes('Cannot create path')) {
+      if (result.stderr.includes('Cannot create path') || result.stderr.includes('Permission denied')) {
         throw new Error(`修改目录失败: 路径无效或权限不足`)
       }
       throw new Error(`修改目录失败: ${result.stderr}`)
@@ -228,10 +246,13 @@ export class SSHTool {
   public async delFile(path: string) {
     if (!(await this.directoryExists(path))) return console.log(chalk.yellow('未找到文件，无需删除'))
     const _path = _PathUtils.normalizeRemotePath(path, this.serverType)
-    const command = `powershell -Command "Remove-Item -path "${_path}"  -Recurse -Force"`
+    const command = this.platformCommand(
+      `powershell -Command "Remove-Item -path "${_path}"  -Recurse -Force"`,
+      `rm -rf '${_path}'`
+    )
     const result = await this.executeCommand(command)
     if (!result.success) {
-      if (result.stderr.includes('Cannot create path')) {
+      if (result.stderr.includes('Cannot create path') || result.stderr.includes('Permission denied')) {
         throw new Error(`删除文件失败: 路径无效或权限不足`)
       }
       throw new Error(`删除文件失败: ${result.stderr}`)

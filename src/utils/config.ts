@@ -116,21 +116,25 @@ export class ConfigManager {
   /**
    * 加载具体的配置文件
    */
-  private async loadConfigFile(configPath: string, model?: string): Promise<Array<EnvironmentConfig>> {
+  private async loadConfigFile(
+    configPath: string,
+    model?: string
+  ): Promise<Array<EnvironmentConfig>> {
     const ext = extname(configPath)
     const fileUrl = pathToFileURL(resolve(configPath)).href
     let data = []
     if (ext === '.js') {
       const importedModule = await import(fileUrl)
       data = importedModule.default || importedModule
-    }
-    if (ext == '.ts') {
+    } else if (ext === '.ts') {
       data = await this.loadTSConfig(configPath)
     } else {
       throw new Error(chalk.red(`不支持的配置文件格式: ${ext}`))
     }
 
-    const ls: Array<EnvironmentConfig> = data.filter((v: EnvironmentConfig) => (model ? v.name == model : v.name))
+    const ls: Array<EnvironmentConfig> = data.filter((v: EnvironmentConfig) =>
+      model ? v.name == model : v.name
+    )
     return ls
   }
 
@@ -145,7 +149,8 @@ export class ConfigManager {
       const ls: Array<string> = []
       if (!val.server.host) ls.push('服务器地址 (server.host) 不能为空')
       if (!val.server.userName) ls.push('未配置登陆用户(val.server.userName)')
-      if (!val.server.password && !val.server.sshKey) ls.push('未配置登陆凭证(val.server.password)|(val.server.sshKey)')
+      if (!val.server.password && !val.server.sshKey)
+        ls.push('未配置登陆凭证(val.server.password)|(val.server.sshKey)')
       if (!val.paths.localDist) ls.push('上传路径 (paths.localDist) 不能为空')
       if (!val.paths.remotePath) ls.push('远程路径 (paths.projectName) 不能为空')
       if (!val.paths.projectName) ls.push('远程文件夹名称 (paths.projectName) 不能为空')
