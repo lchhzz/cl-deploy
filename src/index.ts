@@ -1,8 +1,9 @@
-export { SSHTool } from './utils/ssh.js'
+import { SSHTool } from './utils/ssh.js'
 import { Deployer } from './commands/deploy.js'
 import { EnvironmentConfig, OptionsModel } from './types/config.js'
-export { Deployer } from './commands/deploy.js'
 import { ConfigManager } from './utils/config.js'
+import { ConfigValidator } from './utils/configValidator.js'
+import { ValidationError, ConfigError } from './types/errors.js'
 export { ConfigManager } from './utils/config.js'
 export type { EnvironmentConfig } from './types/config.js'
 
@@ -14,6 +15,17 @@ export class ViewDeploy {
    * 快速部署方法
    */
   static async deploy(config: Array<EnvironmentConfig>, options: any): Promise<void> {
+    try {
+      // 验证配置
+      ConfigValidator.validateEnvironmentConfigs(config)
+      console.log('✅ 配置验证通过')
+    } catch (error) {
+      if (error instanceof ValidationError || error instanceof ConfigError) {
+        console.error('❌ 配置验证失败:', error.message)
+      }
+      throw error
+    }
+
     for (const setting of config) {
       const deployer = new Deployer(setting)
       await deployer.deploy()
@@ -33,6 +45,17 @@ export class ViewDeploy {
    * 测试服务器连接
    */
   static async testConnection(config: EnvironmentConfig): Promise<boolean> {
+    try {
+      // 验证配置
+      ConfigValidator.validateEnvironmentConfig(config)
+      console.log('✅ 配置验证通过')
+    } catch (error) {
+      if (error instanceof ValidationError || error instanceof ConfigError) {
+        console.error('❌ 配置验证失败:', error.message)
+      }
+      throw error
+    }
+
     const deployer = new Deployer(config)
     return await deployer.testConnection()
   }

@@ -6,9 +6,9 @@ import { readdirSync, statSync, existsSync } from 'fs'
 import { Client, ConnectConfig, SFTPWrapper } from 'ssh2'
 import _PathUtils from './pathUtils.js'
 import { IntelligentCommandConverter } from './intelligent-command-converter.js'
+import { CommandError, SSHError, FileError } from '../types/errors.js'
 
-const Progress1 = new ProgressIndicator()
-const Progress2 = new ProgressIndicator()
+const Progress = new ProgressIndicator()
 
 export interface SSHConnectionConfig extends ConnectConfig {
   host: string
@@ -49,7 +49,7 @@ export class SSHTool {
       port: serverConfig.port || 22,
       username: serverConfig.userName,
       password: serverConfig.password,
-      hostKey: serverConfig.sshKey,
+      privateKey: serverConfig.sshKey,
       readyTimeout: 30000,
       algorithms: {
         kex: ['ecdh-sha2-nistp256', 'ecdh-sha2-nistp384', 'ecdh-sha2-nistp521', 'diffie-hellman-group14-sha256']
@@ -69,13 +69,13 @@ export class SSHTool {
       console.log(chalk.cyan('⚡ 执行命令:'), command)
 
       const timeoutId = setTimeout(() => {
-        reject(new Error('命令执行超时'))
+        reject(new CommandError('命令执行超时', undefined, 'COMMAND_TIMEOUT'))
       }, timeout)
 
       this.client.exec(IntelligentCommandConverter.convertCommand(command, this.serverType), (err, stream) => {
         if (err) {
           clearTimeout(timeoutId)
-          reject(err)
+          reject(new SSHError(`命令执行失败: ${err.message}`, 'COMMAND_EXEC_ERROR'))
           return
         }
 
@@ -100,7 +100,7 @@ export class SSHTool {
         stream.on('error', (err: Error) => {
           console.log(chalk.red('命令执行失败：' + err))
           clearTimeout(timeoutId)
-          reject(err)
+          reject(new SSHError(`命令执行失败: ${err.message}`, 'COMMAND_STREAM_ERROR'))
         })
       })
     })
@@ -125,7 +125,7 @@ export class SSHTool {
       })
 
       this.client.on('error', error => {
-        reject(new Error(`SSH 连接失败: ${error.message}`))
+        reject(new SSHError(`SSH 连接失败: ${error.message}`, 'SSH_CONNECTION_ERROR'))
       })
 
       this.client.on('close', () => {})
@@ -138,8 +138,7 @@ export class SSHTool {
     if (this.connected) {
       this.client.end()
       this.connected = false
-      Progress1.stop('')
-      Progress2.stop()
+      Progress.stop('')
       console.log(chalk.yellow('🔌 SSH 连接已关闭'))
     }
   }
@@ -166,7 +165,7 @@ export class SSHTool {
     return new Promise((resolve, reject) => {
       this.client.sftp((error, sftp) => {
         if (error) {
-          reject(new Error(`SFTP 初始化失败: ${error.message}`))
+          reject(new SSHError(`SFTP 初始化失败: ${error.message}`, 'SFTP_INIT_ERROR'))
         } else {
           this.sftp = sftp
           resolve(sftp)
@@ -186,10 +185,7 @@ export class SSHTool {
   public async directoryExists(escapedPath: string): Promise<boolean> {
     try {
       const _path = _PathUtils.normalizeRemotePath(escapedPath, this.serverType)
-      const command = this.platformCommand(
-        `powershell -Command "Test-Path -Path '${_path}'"`,
-        `test -d '${_path}' && echo 'true' || echo 'false'`
-      )
+      const command = this.platformCommand(`powershell -Command "Test-Path -Path '${_path}'"`, `test -d '${_path}' && echo 'true' || echo 'false'`)
       const result = await this.executeCommand(command)
       return this.serverType === 'windows' ? result.stdout === 'True' : result.stdout.includes('true')
     } catch (error) {
@@ -201,16 +197,13 @@ export class SSHTool {
    */
   public async createDirectory(remotePath: string): Promise<void> {
     const _path = _PathUtils.normalizeRemotePath(remotePath, this.serverType)
-    const command = this.platformCommand(
-      `powershell -Command "New-Item -ItemType Directory -Path '${_path}' -Force"`,
-      `mkdir -p '${_path}'`
-    )
+    const command = this.platformCommand(`powershell -Command "New-Item -ItemType Directory -Path '${_path}' -Force"`, `mkdir -p '${_path}'`)
     const result = await this.executeCommand(command)
     if (!result.success) {
       if (result.stderr.includes('Cannot create path') || result.stderr.includes('Permission denied')) {
-        throw new Error(`创建目录失败: 路径无效或权限不足`)
+        throw new FileError(`创建目录失败: 路径无效或权限不足`, 'DIRECTORY_CREATE_PERMISSION_ERROR')
       }
-      throw new Error(`创建目录失败: ${result.stderr}`)
+      throw new FileError(`创建目录失败: ${result.stderr}`, 'DIRECTORY_CREATE_ERROR')
     }
   }
 
@@ -224,17 +217,14 @@ export class SSHTool {
     const parentPath = _PathUtils.dirname(_path)
     const newPath = _PathUtils.join(parentPath, newName)
 
-    const command = this.platformCommand(
-      `powershell -Command "Rename-Item -Path '${_path}' -NewName '${newName}' -Force"`,
-      `mv '${_path}' '${newPath}'`
-    )
+    const command = this.platformCommand(`powershell -Command "Rename-Item -Path '${_path}' -NewName '${newName}' -Force"`, `mv '${_path}' '${newPath}'`)
     const result = await this.executeCommand(command)
 
     if (!result.success) {
       if (result.stderr.includes('Cannot create path') || result.stderr.includes('Permission denied')) {
-        throw new Error(`修改目录失败: 路径无效或权限不足`)
+        throw new FileError(`修改目录失败: 路径无效或权限不足`, 'DIRECTORY_RENAME_PERMISSION_ERROR')
       }
-      throw new Error(`修改目录失败: ${result.stderr}`)
+      throw new FileError(`修改目录失败: ${result.stderr}`, 'DIRECTORY_RENAME_ERROR')
     }
   }
 
@@ -246,27 +236,23 @@ export class SSHTool {
   public async delFile(path: string) {
     if (!(await this.directoryExists(path))) return console.log(chalk.yellow('未找到文件，无需删除'))
     const _path = _PathUtils.normalizeRemotePath(path, this.serverType)
-    const command = this.platformCommand(
-      `powershell -Command "Remove-Item -path "${_path}"  -Recurse -Force"`,
-      `rm -rf '${_path}'`
-    )
+    const command = this.platformCommand(`powershell -Command "Remove-Item -path "${_path}"  -Recurse -Force"`, `rm -rf '${_path}'`)
     const result = await this.executeCommand(command)
     if (!result.success) {
       if (result.stderr.includes('Cannot create path') || result.stderr.includes('Permission denied')) {
-        throw new Error(`删除文件失败: 路径无效或权限不足`)
+        throw new FileError(`删除文件失败: 路径无效或权限不足`, 'FILE_DELETE_PERMISSION_ERROR')
       }
-      throw new Error(`删除文件失败: ${result.stderr}`)
+      throw new FileError(`删除文件失败: ${result.stderr}`, 'FILE_DELETE_ERROR')
     }
   }
   /**
    * 上传单个文件
    */
-  public async uploadFile(localPath: string, remotePath: string): Promise<void> {
+  public async uploadFile(localPath: string, remotePath: string, progressCallback?: (percent: number, transferred: number, total: number) => void): Promise<void> {
     if (!this.connected) await this.connect()
     this.pendingOperations++
     try {
-      Progress2.update(chalk.blue('📤 上传文件:') + chalk.gray(`${localPath} → ${remotePath}`))
-      if (!existsSync(localPath)) throw new Error(`本地文件不存在: ${localPath}`)
+      if (!existsSync(localPath)) throw new FileError(`本地文件不存在: ${localPath}`, 'LOCAL_FILE_NOT_FOUND')
       const sftp = await this.getSFTP()
       const windowsRemotePath = remotePath.replace(/\//g, '\\')
 
@@ -275,16 +261,15 @@ export class SSHTool {
           localPath,
           windowsRemotePath,
           {
+            chunkSize: 32768, // 32KB块大小，可根据网络情况调整
             step: (totalTransferred: number, chunk: number, total: number) => {
-              const percent = ((totalTransferred / total) * 100).toFixed(1)
-              const transferredMB = (totalTransferred / 1024 / 1024).toFixed(2)
-              const totalMB = (total / 1024 / 1024).toFixed(2)
-              Progress2.update(`\r📤 上传进度: ${percent}% (${transferredMB}MB/${totalMB}MB)`)
+              const percent = (totalTransferred / total) * 100
+              progressCallback?.(percent, totalTransferred, total)
             }
           },
           (error?: Error | null) => {
             if (error) {
-              reject(error)
+              reject(new SSHError(`文件上传失败: ${error.message}`, 'FILE_UPLOAD_ERROR'))
             } else {
               resolve()
             }
@@ -322,9 +307,9 @@ export class SSHTool {
   /**
    * 上传整个目录
    */
-  public async uploadDirectory(localPath: string, remotePath: string): Promise<void> {
+  public async uploadDirectory(localPath: string, remotePath: string, concurrency: number = 5): Promise<void> {
     if (!existsSync(localPath)) {
-      throw new Error(`本地目录不存在: ${localPath}`)
+      throw new FileError(`本地目录不存在: ${localPath}`, 'LOCAL_DIR_NOT_FOUND')
     }
 
     console.log(chalk.blue('📦 上传目录:'), chalk.gray(`${localPath} → ${remotePath}`))
@@ -332,7 +317,7 @@ export class SSHTool {
     // 确保远程目录存在
     if (!(await this.directoryExists(remotePath))) await this.createDirectory(remotePath)
 
-    // 统计文件数量
+    // 统计文件数量并收集所有文件路径
     const totalFiles = this.countFiles(localPath)
     if (totalFiles === 0) {
       console.log(chalk.yellow('⚠️ 目录为空，跳过上传'))
@@ -340,13 +325,14 @@ export class SSHTool {
     }
 
     console.log(chalk.cyan(`📊 总共需要上传 ${totalFiles} 个文件`))
+    console.log(chalk.cyan(`⚡ 使用并发数: ${concurrency}`))
 
     let uploadedFiles = 0
-    Progress1.start('')
-    Progress2.start('')
+    Progress.start('')
 
-    // 递归上传函数
-    const uploadRecursive = async (currentLocalPath: string, currentRemotePath: string): Promise<void> => {
+    // 收集所有需要上传的文件
+    const filesToUpload: Array<{ local: string; remote: string }> = []
+    const collectFiles = (currentLocalPath: string, currentRemotePath: string) => {
       const items = readdirSync(currentLocalPath)
       for (const item of items) {
         const localItemPath = join(currentLocalPath, item)
@@ -354,28 +340,98 @@ export class SSHTool {
         const stats = statSync(localItemPath)
 
         if (stats.isFile()) {
-          try {
-            await this.uploadFile(localItemPath, remoteItemPath)
-            uploadedFiles++
-            Progress1.update(`进度: ${uploadedFiles}/${totalFiles} 个文件`)
-          } catch (error) {
-            console.log(chalk.red(`❌ 文件上传失败: ${localItemPath}`))
-            throw error
-          }
+          filesToUpload.push({ local: localItemPath, remote: remoteItemPath })
         } else if (stats.isDirectory()) {
-          if (!(await this.directoryExists(remoteItemPath))) await this.createDirectory(remoteItemPath)
-          await uploadRecursive(localItemPath, remoteItemPath)
+          filesToUpload.push({ local: localItemPath, remote: remoteItemPath })
+          collectFiles(localItemPath, remoteItemPath)
+        }
+      }
+    }
+
+    // 先创建所有远程目录
+    const createRemoteDirs = async () => {
+      for (const fileInfo of filesToUpload) {
+        if (existsSync(fileInfo.local) && statSync(fileInfo.local).isDirectory()) {
+          if (!(await this.directoryExists(fileInfo.remote))) {
+            await this.createDirectory(fileInfo.remote)
+          }
+        }
+      }
+    }
+
+    // 并行上传文件
+    const uploadFilesInParallel = async () => {
+      const queue: Array<{ local: string; remote: string }> = filesToUpload.filter(f => existsSync(f.local) && statSync(f.local).isFile())
+      let currentFileName = ''
+      let currentFilePercent = 0
+
+      // 统一的进度更新函数
+      const updateProgress = () => {
+        const filesText = `文件数：${uploadedFiles}/${totalFiles}`
+        const percentText = `当前文件上传百分比：${currentFilePercent.toFixed(1)}%`
+        const fileText = `文件名：${currentFileName}`
+        Progress.update(`${filesText} -- ${percentText} -- ${fileText}`)
+      }
+
+      // 使用更简单的并发控制方式
+      if (concurrency <= 1) {
+        // 串行上传
+        for (const fileInfo of queue) {
+          currentFileName = fileInfo.local
+          currentFilePercent = 0
+          updateProgress()
+          await this.uploadFile(fileInfo.local, fileInfo.remote, percent => {
+            currentFilePercent = percent
+            updateProgress()
+          })
+          uploadedFiles++
+          currentFilePercent = 100
+          updateProgress()
+        }
+      } else {
+        // 并行上传
+        const results = []
+        for (const fileInfo of queue) {
+          const task = (async () => {
+            currentFileName = fileInfo.local
+            currentFilePercent = 0
+            updateProgress()
+            await this.uploadFile(fileInfo.local, fileInfo.remote, percent => {
+              currentFilePercent = percent
+              updateProgress()
+            })
+            uploadedFiles++
+            currentFilePercent = 100
+            updateProgress()
+          })().catch(error => {
+            console.log(chalk.red(`❌ 文件上传失败: ${fileInfo.local}`))
+            throw error
+          })
+
+          results.push(task)
+
+          // 当达到并发限制时，等待所有任务完成
+          if (results.length >= concurrency) {
+            await Promise.all(results)
+            results.length = 0
+          }
+        }
+
+        // 等待剩余任务完成
+        if (results.length > 0) {
+          await Promise.all(results)
         }
       }
     }
 
     try {
-      await uploadRecursive(localPath, remotePath)
-      Progress1.stop(`进度: ${totalFiles}/${totalFiles} 个文件`)
-      Progress2.stop(chalk.green(`✅ 目录上传完成，共上传 ${uploadedFiles} 个文件`))
+      collectFiles(localPath, remotePath)
+      await createRemoteDirs()
+      await uploadFilesInParallel()
+
+      Progress.stop(chalk.green(`✅ 目录上传完成，共上传 ${uploadedFiles} 个文件`))
     } catch (error) {
-      Progress1.stop(chalk.red('❌ 目录上传失败'))
-      Progress2.stop('')
+      Progress.stop(chalk.red('❌ 目录上传失败'))
       throw error
     }
   }

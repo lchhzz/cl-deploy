@@ -3,6 +3,7 @@ import path, { join, resolve } from 'path'
 import chalk from 'chalk'
 import { SSHTool } from '../utils/ssh.js'
 import { DeployOptions, EnvironmentConfig } from '../types/config.js'
+import { DeployError, FileError } from '../types/errors.js'
 /**
  * 部署器类
  * 职责：执行具体的部署操作
@@ -119,8 +120,8 @@ export class Deployer {
       const fileName = join(remotePath, _projectName)
       await this.sshTool.delFile(fileName)
       await this.sshTool.editDirectoryName(join(remotePath, 'old_' + this.config.paths.projectName), this.config.paths.projectName)
-    } catch {
-      throw new Error('重置部署失败，需要手动操作')
+    } catch (error) {
+      throw new DeployError('重置部署失败，需要手动操作', 'DEPLOY_RESET_ERROR')
     }
   }
 
@@ -129,8 +130,21 @@ export class Deployer {
    */
   private async handleDeploymentError(error: any): Promise<void> {
     console.log(chalk.red('❌ 部署失败:'), error.message)
-    console.log(chalk.gray('错误详情:'))
-    console.log(chalk.gray(error.stack))
+
+    // 根据错误类型提供更具体的提示
+    if (error.code === 'LOCAL_DIR_NOT_FOUND' || error.code === 'LOCAL_DIR_EMPTY') {
+      console.log(chalk.yellow('💡 提示: 请确保项目已构建完成，并且 localDist 路径配置正确'))
+    }
+
+    // 调试模式显示详细错误
+    if (process.env.DEBUG) {
+      console.log(chalk.gray('错误详情:'))
+      console.log(chalk.gray(error.stack))
+      if (error.code) {
+        console.log(chalk.gray(`错误代码: ${error.code}`))
+      }
+    }
+
     throw error // 重新抛出错误，让上层处理
   }
 
@@ -182,13 +196,13 @@ export class Deployer {
     const localPath = path.resolve(process.cwd(), this.config.paths.localDist)
 
     if (!existsSync(localPath)) {
-      throw new Error(`本地目录不存在: ${localPath}`)
+      throw new FileError(`本地目录不存在: ${localPath}`, 'LOCAL_DIR_NOT_FOUND')
     }
 
     // 检查目录是否为空
     const files = readdirSync(localPath)
     if (files.length === 0) {
-      throw new Error(`本地目录为空: ${localPath}`)
+      throw new FileError(`本地目录为空: ${localPath}`, 'LOCAL_DIR_EMPTY')
     }
     console.log('✅ 验证通过')
   }

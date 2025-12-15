@@ -58,14 +58,14 @@ export class IntelligentCommandConverter {
       // 文件操作
       { regex: /^ls\s+(-[la]*)?\s*(\S*)/, replace: 'Get-ChildItem $2 | Format-Table Name,Length,LastWriteTime -AutoSize' },
       { regex: /^pwd/, replace: 'Get-Location' },
-      { regex: /^mkdir\s+-p\s+(\S+)/, replace: 'New-Item -ItemType Directory -Force -Path $1' },
-      { regex: /^mkdir\s+(\S+)/, replace: 'New-Item -ItemType Directory -Path $1' },
-      { regex: /^rm\s+-rf\s+(\S+)/, replace: 'Remove-Item -Recurse -Force -Path $1' },
-      { regex: /^rm\s+(\S+)/, replace: 'Remove-Item -Path $1' },
-      { regex: /^cp\s+-r\s+(\S+)\s+(\S+)/, replace: 'Copy-Item -Recurse -Path $1 -Destination $2' },
-      { regex: /^cp\s+(\S+)\s+(\S+)/, replace: 'Copy-Item -Path $1 -Destination $2' },
-      { regex: /^mv\s+(\S+)\s+(\S+)/, replace: 'Move-Item -Path $1 -Destination $2' },
-      { regex: /^cat\s+(\S+)/, replace: 'Get-Content -Path $1' },
+      { regex: /^mkdir\s+-p\s+(\S+)/, replace: 'New-Item -ItemType Directory -Force -Path "$1"' },
+      { regex: /^mkdir\s+(\S+)/, replace: 'New-Item -ItemType Directory -Path "$1"' },
+      { regex: /^rm\s+-rf\s+(\S+)/, replace: 'Remove-Item -Recurse -Force -Path "$1"' },
+      { regex: /^rm\s+(\S+)/, replace: 'Remove-Item -Path "$1"' },
+      { regex: /^cp\s+-r\s+(\S+)\s+(\S+)/, replace: 'Copy-Item -Recurse -Path "$1" -Destination "$2"' },
+      { regex: /^cp\s+(\S+)\s+(\S+)/, replace: 'Copy-Item -Path "$1" -Destination "$2"' },
+      { regex: /^mv\s+(\S+)\s+(\S+)/, replace: 'Move-Item -Path "$1" -Destination "$2"' },
+      { regex: /^cat\s+(\S+)/, replace: 'Get-Content -Path "$1"' },
 
       // 系统信息
       { regex: /^uname\s+-a/, replace: 'systeminfo | Select-String "OS Name","OS Version"' },
@@ -73,8 +73,8 @@ export class IntelligentCommandConverter {
       { regex: /^ps\s+aux/, replace: 'Get-Process | Sort-Object CPU -Descending | Select-Object -First 10' },
 
       // 查找
-      { regex: /^find\s+\.\s+-name\s+['"]([^'"]+)['"]/, replace: 'Get-ChildItem -Recurse -Filter $1' },
-      { regex: /^grep\s+(-[riv]*)?\s*['"]([^'"]+)['"]\s+(\S+)/, replace: 'Select-String -Pattern "$2" -Path $3' }
+      { regex: /^find\s+\.\s+-name\s+['"]([^'"]+)['"]/, replace: 'Get-ChildItem -Recurse -Filter "$1"' },
+      { regex: /^grep\s+(-[riv]*)?\s*['"]([^'"]+)['"]\s+(\S+)/, replace: 'Select-String -Pattern "$2" -Path "$3"' }
     ]
 
     for (const conversion of conversions) {
@@ -88,7 +88,9 @@ export class IntelligentCommandConverter {
     converted = converted.replace(/\/([a-zA-Z])[/\\]/g, '$1:\\')
     converted = converted.replace(/\//g, '\\')
 
-    return `powershell -Command "${converted}"`
+    // 转义PowerShell命令中的特殊字符
+    const escapedCommand = converted.replace(/["`\$]/g, '`$&')
+    return `powershell -Command "${escapedCommand}"`
   }
 
   /**

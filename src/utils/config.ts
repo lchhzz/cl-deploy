@@ -5,6 +5,8 @@ import { fileURLToPath, pathToFileURL } from 'url'
 import { EnvironmentConfig } from '../types/config'
 import chalk from 'chalk'
 import { tmpdir } from 'os'
+import { ConfigValidator } from './configValidator.js'
+import { ConfigError, ValidationError } from '../types/errors.js'
 /**
  * 配置管理器类
  * 职责：加载、验证、管理部署配置
@@ -116,10 +118,7 @@ export class ConfigManager {
   /**
    * 加载具体的配置文件
    */
-  private async loadConfigFile(
-    configPath: string,
-    model?: string
-  ): Promise<Array<EnvironmentConfig>> {
+  private async loadConfigFile(configPath: string, model?: string): Promise<Array<EnvironmentConfig>> {
     const ext = extname(configPath)
     const fileUrl = pathToFileURL(resolve(configPath)).href
     let data = []
@@ -132,9 +131,7 @@ export class ConfigManager {
       throw new Error(chalk.red(`不支持的配置文件格式: ${ext}`))
     }
 
-    const ls: Array<EnvironmentConfig> = data.filter((v: EnvironmentConfig) =>
-      model ? v.name == model : v.name
-    )
+    const ls: Array<EnvironmentConfig> = data.filter((v: EnvironmentConfig) => (model ? v.name == model : v.name))
     return ls
   }
 
@@ -142,25 +139,18 @@ export class ConfigManager {
    * 验证配置是否完整
    */
   private validateConfig(config: Array<EnvironmentConfig>): void {
-    if (!config.length) throw new Error(`配置验证失败:\n- 文件内容未配置`)
-
-    const errors: Map<string, Array<string> | []> = new Map()
-    config.forEach(val => {
-      const ls: Array<string> = []
-      if (!val.server.host) ls.push('服务器地址 (server.host) 不能为空')
-      if (!val.server.userName) ls.push('未配置登陆用户(val.server.userName)')
-      if (!val.server.password && !val.server.sshKey)
-        ls.push('未配置登陆凭证(val.server.password)|(val.server.sshKey)')
-      if (!val.paths.localDist) ls.push('上传路径 (paths.localDist) 不能为空')
-      if (!val.paths.remotePath) ls.push('远程路径 (paths.projectName) 不能为空')
-      if (!val.paths.projectName) ls.push('远程文件夹名称 (paths.projectName) 不能为空')
-      if (ls.length) errors.set(val.name, ls)
-    })
-    if (errors.size) {
-      errors.forEach((val, key) => {
-        console.log(val, key)
-      })
-      throw new Error(chalk.redBright(`配置验证失败:请填写必填项`))
+    try {
+      ConfigValidator.validateEnvironmentConfigs(config)
+      console.log(chalk.green('✅ 配置验证通过'))
+    } catch (error) {
+      if (error instanceof ValidationError || error instanceof ConfigError) {
+        console.log(chalk.red(`❌ 配置验证失败: ${error.message}`))
+        if (process.env.DEBUG && error.stack) {
+          console.log(chalk.gray(`错误详情: ${error.stack}`))
+        }
+        throw error
+      }
+      throw new ConfigError('配置验证失败', 'CONFIG_VALIDATION_ERROR')
     }
   }
 
