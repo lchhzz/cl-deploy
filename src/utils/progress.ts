@@ -1,14 +1,21 @@
 import chalk from 'chalk'
+import logUpdate from 'log-update'
+import cliCursor from 'cli-cursor'
 
 /**
- * 轻量进度指示器：单行覆盖输出，节流避免刷屏
+ * 使用 log-update 库的进度指示器
+ * 更可靠，解决覆盖问题
  */
 export class ProgressIndicator {
   private currentMessage = ''
   private isActive = false
   private lastUpdateTs = 0
   private readonly throttleMs = 200
-  private readonly width = process.stdout.columns || 120
+
+  constructor() {
+    // 隐藏光标
+    cliCursor.hide()
+  }
 
   /**
    * 开始显示一行进度
@@ -38,11 +45,18 @@ export class ProgressIndicator {
   stop(message?: string): void {
     if (!this.isActive) return
     this.isActive = false
-    this.clearLine()
+
+    // 清除当前行
+    logUpdate.clear()
+
     if (message !== undefined) {
-      process.stdout.write(message + '\n')
+      console.log(message)
     }
+
     this.currentMessage = ''
+
+    // 恢复光标
+    cliCursor.show()
   }
 
   pause(): void {
@@ -63,12 +77,7 @@ export class ProgressIndicator {
     }
   }
 
-  private clearLine() {
-    process.stdout.write('\r' + ' '.repeat(this.width - 1) + '\r')
-  }
-
-  private writeLine(message: string) {
-    this.clearLine()
-    process.stdout.write(chalk.blue(message))
+  private writeLine(message: string): void {
+    logUpdate(chalk.blue(message))
   }
 }
