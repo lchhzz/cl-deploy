@@ -1,98 +1,74 @@
 import chalk from 'chalk'
 
 /**
- * 命令行进度指示器
+ * 轻量进度指示器：单行覆盖输出，节流避免刷屏
  */
 export class ProgressIndicator {
-  private spinnerChars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
-  private currentFrame = 0
-  private intervalId: NodeJS.Timeout | null = null
-  private currentMessage: string = ''
-  private isActive: boolean = false
+  private currentMessage = ''
+  private isActive = false
+  private lastUpdateTs = 0
+  private readonly throttleMs = 200
+  private readonly width = process.stdout.columns || 120
 
   /**
-   * 开始旋转进度指示器
+   * 开始显示一行进度
    */
   start(message: string = ''): void {
-    this.currentMessage = message
     this.isActive = true
-
-    // 初始显示
-    process.stdout.write(chalk.blue(this.spinnerChars[this.currentFrame]) + ' ' + this.currentMessage)
-
-    this.intervalId = setInterval(() => {
-      if (!this.isActive) return
-
-      this.currentFrame = (this.currentFrame + 1) % this.spinnerChars.length
-      process.stdout.write('\r' + chalk.blue(this.spinnerChars[this.currentFrame]) + ' ' + this.currentMessage)
-    }, 100)
+    this.currentMessage = message
+    this.writeLine(this.currentMessage)
+    this.lastUpdateTs = Date.now()
   }
 
   /**
-   * 更新进度消息（保持在同一行）
+   * 更新进度消息（单行覆盖，节流）
    */
   update(message: string): void {
     if (!this.isActive) return
-
+    const now = Date.now()
+    if (now - this.lastUpdateTs < this.throttleMs && message === this.currentMessage) return
     this.currentMessage = message
-
-    // 清除当前行，然后重新写入
-    process.stdout.write('\r' + ' '.repeat(process.stdout.columns - 1) + '\r')
-    process.stdout.write(chalk.blue(this.spinnerChars[this.currentFrame]) + ' ' + this.currentMessage)
+    this.writeLine(this.currentMessage)
+    this.lastUpdateTs = now
   }
 
   /**
-   * 停止进度指示器并显示结果
+   * 停止进度显示
    */
   stop(message?: string): void {
+    if (!this.isActive) return
     this.isActive = false
-
-    if (this.intervalId) {
-      clearInterval(this.intervalId)
-      this.intervalId = null
-    }
-
-    // 清除当前行，显示最终消息
+    this.clearLine()
     if (message !== undefined) {
-      process.stdout.write('\r' + ' '.repeat(process.stdout.columns - 1) + '\r')
       process.stdout.write(message + '\n')
-    } else {
-      process.stdout.write('\n')
     }
-
-    // 重置状态
     this.currentMessage = ''
-    this.currentFrame = 0
   }
 
-  /**
-   * 暂停进度指示器（保持显示）
-   */
   pause(): void {
     this.isActive = false
-    if (this.intervalId) {
-      clearInterval(this.intervalId)
-      this.intervalId = null
-    }
   }
 
-  /**
-   * 恢复进度指示器
-   */
   resume(): void {
-    if (!this.isActive && this.currentMessage) {
+    if (this.currentMessage) {
       this.isActive = true
-      this.start(this.currentMessage)
+      this.writeLine(this.currentMessage)
     }
   }
 
-  /**
-   * 获取当前状态
-   */
   getStatus(): { isActive: boolean; message: string } {
     return {
       isActive: this.isActive,
       message: this.currentMessage
     }
+  }
+
+  private clearLine() {
+    process.stdout.write('\r' + ' '.repeat(this.width - 1) + '\r')
+  }
+
+  private writeLine(message: string) {
+    this.clearLine()
+    process.stdout.write(chalk.blue(message))
   }
 }

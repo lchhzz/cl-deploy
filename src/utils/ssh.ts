@@ -8,7 +8,9 @@ import _PathUtils from './pathUtils.js'
 import { IntelligentCommandConverter } from './intelligent-command-converter.js'
 import { CommandError, SSHError, FileError } from '../types/errors.js'
 
-const Progress = new ProgressIndicator()
+// 独立的进度指示器：命令 & 上传互不干扰
+const CommandProgress = new ProgressIndicator()
+const UploadProgress = new ProgressIndicator()
 
 export interface SSHConnectionConfig extends ConnectConfig {
   host: string
@@ -66,7 +68,8 @@ export class SSHTool {
    */
   public async executeCommand(command: string, timeout = 30000): Promise<SSHCommandResult> {
     return new Promise((resolve, reject) => {
-      console.log(chalk.cyan('⚡ 执行命令:'), command)
+      // 命令进度：总是显示当前正在执行的命令
+      CommandProgress.start(chalk.cyan(`⚡ 执行命令: ${command}`))
 
       const timeoutId = setTimeout(() => {
         reject(new CommandError('命令执行超时', undefined, 'COMMAND_TIMEOUT'))
@@ -89,17 +92,18 @@ export class SSHTool {
           clearTimeout(timeoutId)
           const result = { code, stdout: stdout.trim(), stderr: stderr.trim(), success: code === 0 }
 
-          if (code === 0) {
-            console.log(chalk.green('✅ 命令执行成功'))
-          } else {
-            console.log(chalk.yellow(`⚠️ 命令退出码: ${code}`))
-          }
+          CommandProgress.stop(
+            code === 0
+              ? chalk.green(`✅ 命令完成 (exit ${code})`)
+              : chalk.yellow(`⚠️ 命令退出码: ${code}`)
+          )
 
           resolve(result)
         })
         stream.on('error', (err: Error) => {
           console.log(chalk.red('命令执行失败：' + err))
           clearTimeout(timeoutId)
+          CommandProgress.stop(chalk.red(`❌ 命令执行失败: ${err.message}`))
           reject(new SSHError(`命令执行失败: ${err.message}`, 'COMMAND_STREAM_ERROR'))
         })
       })
@@ -138,7 +142,9 @@ export class SSHTool {
     if (this.connected) {
       this.client.end()
       this.connected = false
-      Progress.stop('')
+      // 结束可能存在的命令/上传进度行
+      CommandProgress.stop()
+      UploadProgress.stop()
       console.log(chalk.yellow('🔌 SSH 连接已关闭'))
     }
   }
@@ -184,10 +190,11 @@ export class SSHTool {
    */
   public async directoryExists(escapedPath: string): Promise<boolean> {
     try {
-      const _path = _PathUtils.normalizeRemotePath(escapedPath, this.serverType)
+      const serverType = this.serverType || 'unix'
+      const _path = _PathUtils.normalizeRemotePath(escapedPath, serverType)
       const command = this.platformCommand(`powershell -Command "Test-Path -Path '${_path}'"`, `test -d '${_path}' && echo 'true' || echo 'false'`)
       const result = await this.executeCommand(command)
-      return this.serverType === 'windows' ? result.stdout === 'True' : result.stdout.includes('true')
+      return serverType === 'windows' ? result.stdout === 'True' : result.stdout.includes('true')
     } catch (error) {
       return false
     }
@@ -196,7 +203,8 @@ export class SSHTool {
    * 创建远程目录（递归创建）
    */
   public async createDirectory(remotePath: string): Promise<void> {
-    const _path = _PathUtils.normalizeRemotePath(remotePath, this.serverType)
+    const serverType = this.serverType || 'unix'
+    const _path = _PathUtils.normalizeRemotePath(remotePath, serverType)
     const command = this.platformCommand(`powershell -Command "New-Item -ItemType Directory -Path '${_path}' -Force"`, `mkdir -p '${_path}'`)
     const result = await this.executeCommand(command)
     if (!result.success) {
@@ -213,7 +221,8 @@ export class SSHTool {
   public async editDirectoryName(path: string, newName: string) {
     if (!(await this.directoryExists(path))) return console.log(chalk.yellow('未找到要修改的文件目录'))
 
-    const _path = _PathUtils.normalizeRemotePath(path, this.serverType)
+    const serverType = this.serverType || 'unix'
+    const _path = _PathUtils.normalizeRemotePath(path, serverType)
     const parentPath = _PathUtils.dirname(_path)
     const newPath = _PathUtils.join(parentPath, newName)
 
@@ -235,8 +244,12 @@ export class SSHTool {
    */
   public async delFile(path: string) {
     if (!(await this.directoryExists(path))) return console.log(chalk.yellow('未找到文件，无需删除'))
-    const _path = _PathUtils.normalizeRemotePath(path, this.serverType)
-    const command = this.platformCommand(`powershell -Command "Remove-Item -path "${_path}"  -Recurse -Force"`, `rm -rf '${_path}'`)
+    const serverType = this.serverType || 'unix'
+    const _path = _PathUtils.normalizeRemotePath(path, serverType)
+    const command = this.platformCommand(
+      `powershell -Command "Remove-Item -Path '${_path}' -Recurse -Force"`,
+      `rm -rf '${_path}'`
+    )
     const result = await this.executeCommand(command)
     if (!result.success) {
       if (result.stderr.includes('Cannot create path') || result.stderr.includes('Permission denied')) {
@@ -327,9 +340,10 @@ export class SSHTool {
     console.log(chalk.cyan(`📊 总共需要上传 ${totalFiles} 个文件`))
     console.log(chalk.cyan(`⚡ 使用并发数: ${concurrency}`))
 
-    let uploadedFiles = 0
-    Progress.start('')
+    // 上传进度：独立于命令进度
+    UploadProgress.start('准备上传...')
 
+    let uploadedFiles = 0
     // 收集所有需要上传的文件
     const filesToUpload: Array<{ local: string; remote: string }> = []
     const collectFiles = (currentLocalPath: string, currentRemotePath: string) => {
@@ -364,13 +378,21 @@ export class SSHTool {
       const queue: Array<{ local: string; remote: string }> = filesToUpload.filter(f => existsSync(f.local) && statSync(f.local).isFile())
       let currentFileName = ''
       let currentFilePercent = 0
+      let lastLoggedFile = ''
 
-      // 统一的进度更新函数
+      // 统一的进度更新函数：只在“切换到新的文件”时输出一次
       const updateProgress = () => {
+        // 只显示正在处理的文件，跳过已完成的
+        if (currentFilePercent >= 100) return
+        // 同一个文件只输出一次，避免多行
+        if (currentFileName === lastLoggedFile) return
+
         const filesText = `文件数：${uploadedFiles}/${totalFiles}`
         const percentText = `当前文件上传百分比：${currentFilePercent.toFixed(1)}%`
         const fileText = `文件名：${currentFileName}`
-        Progress.update(`${filesText} -- ${percentText} -- ${fileText}`)
+        // 单行展示当前进行中的文件和进度，避免刷屏
+        UploadProgress.update(`上传中 ${filesText} | ${percentText} | ${fileText}`)
+        lastLoggedFile = currentFileName
       }
 
       // 使用更简单的并发控制方式
@@ -429,9 +451,9 @@ export class SSHTool {
       await createRemoteDirs()
       await uploadFilesInParallel()
 
-      Progress.stop(chalk.green(`✅ 目录上传完成，共上传 ${uploadedFiles} 个文件`))
+      UploadProgress.stop(chalk.green(`✅ 目录上传完成，共上传 ${uploadedFiles} 个文件`))
     } catch (error) {
-      Progress.stop(chalk.red('❌ 目录上传失败'))
+      UploadProgress.stop(chalk.red('❌ 目录上传失败'))
       throw error
     }
   }

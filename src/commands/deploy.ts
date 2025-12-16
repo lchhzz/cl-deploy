@@ -107,7 +107,9 @@ export class Deployer {
   private async completeDeployment(): Promise<void> {
     console.log(chalk.gray('='.repeat(50)))
     console.log(chalk.green('🎉 部署完成！'))
-    console.log(chalk.blue(`🌐 访问地址: http://${this.config.server.host}/${this.config.paths.remotePath}/${this.config.paths.projectName}`))
+    const remoteDir = join(this.config.paths.remotePath, this.config.paths.projectName)
+    console.log(chalk.blue(`📂 远程目录: ${remoteDir}`))
+    console.log(chalk.gray('提示: 若有反向代理/服务端口，请按实际服务地址访问'))
   }
 
   /**

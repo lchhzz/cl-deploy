@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 
 import chalk from 'chalk'
+import { createRequire } from 'module'
+
+// 使用 createRequire 以兼容不支持 JSON import assert 的 Node 版本
+const require = createRequire(import.meta.url)
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const pkg = require('../package.json')
 import { Command } from 'commander'
 import { ConfigManager } from './utils/config.js'
 import { Deployer } from './commands/deploy.js'
@@ -29,7 +35,7 @@ class ViewDeployCLI {
    */
   private setupCLI(): void {
     // 基础信息
-    this.program.name('view-deploy').description('🚀 前端项目 SSH 部署工具').version('1.0.0')
+    this.program.name('view-deploy').description('🚀 前端项目 SSH 部署工具').version(pkg.version)
 
     // init 命令 - 创建配置文件模板
     this.program

@@ -3,6 +3,11 @@ export class IntelligentCommandConverter {
    * 智能转换命令（自动检测源命令类型）
    */
   static convertCommand(command: string, targetType?: 'windows' | 'unix'): string {
+    // 已经是 PowerShell 包装且目标为 windows 时，直接返回，避免重复包装
+    if (targetType === 'windows' && /^powershell\s+-Command/i.test(command.trim())) {
+      return command
+    }
+
     // 检测命令类型
     const sourceType = this.detectCommandType(command)
 
@@ -21,7 +26,25 @@ export class IntelligentCommandConverter {
   private static detectCommandType(command: string): 'windows' | 'unix' {
     const unixIndicators = [/^ls\b/, /^cd\b/, /^pwd\b/, /^mkdir\b/, /^rm\b/, /^cp\b/, /^mv\b/, /^cat\b/, /^grep\b/, /^find\b/, /^chmod\b/, /^chown\b/, /^sudo\b/, /^uname\b/, /^df\b/, /^free\b/, /^ps\b/, /^systemctl\b/, /^service\b/, /^ip\b/, /^ss\b/]
 
-    const windowsIndicators = [/^Get-/, /^Set-/, /^New-/, /^Remove-/, /^Rename-/, /^Copy-/, /^Move-/, /^Test-/, /^Start-/, /^Stop-/, /^Restart-/, /^Import-/, /^Export-/, /^Write-/, /^Read-/, /^Select-/]
+    const windowsIndicators = [
+      /^powershell\s+-Command/i,
+      /^Get-/,
+      /^Set-/,
+      /^New-/,
+      /^Remove-/,
+      /^Rename-/,
+      /^Copy-/,
+      /^Move-/,
+      /^Test-/,
+      /^Start-/,
+      /^Stop-/,
+      /^Restart-/,
+      /^Import-/,
+      /^Export-/,
+      /^Write-/,
+      /^Read-/,
+      /^Select-/
+    ]
 
     for (const indicator of unixIndicators) {
       if (indicator.test(command)) return 'unix'

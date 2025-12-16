@@ -25,12 +25,13 @@ class PathUtils {
   /**
    * 标准化远程路径（用于 SSH 命令）
    */
-  public static normalizeRemotePath(inputPath: string, isServer = 'windows') {
+  public static normalizeRemotePath(inputPath: string, isServer: 'windows' | 'unix' = 'unix') {
     let normalized = this.toUnixPath(inputPath)
-    if (isServer == 'windows') {
-      // 对于 Windows 服务器，确保驱动器号
-      if (!normalized.includes(':')) {
-        normalized = `C:${normalized}`
+
+    if (isServer === 'windows') {
+      // 对于 Windows 服务器，确保驱动器号；若用户已传入盘符则不再追加
+      if (!/^[A-Za-z]:/.test(normalized)) {
+        normalized = `C:${normalized.startsWith('/') ? normalized : `/${normalized}`}`
       }
       normalized = this.toWindowsPath(normalized)
     }
